@@ -1,0 +1,3812 @@
+Grammar
+
+    0 $accept: program $end
+
+    1 program: stmt_list
+
+    2 stmt_list: ε
+    3          | stmt_list stmt
+
+    4 stmt: var_decl
+    5     | simple_stmt ';'
+    6     | block
+    7     | if_stmt
+    8     | while_stmt
+    9     | for_stmt
+   10     | switch_stmt
+   11     | func_def
+   12     | try_stmt
+   13     | jump_stmt
+   14     | assert_stmt
+   15     | print_stmt
+   16     | invalid_stmt
+   17     | error ';'
+   18     | error block
+
+   19 block: '{' stmt_list '}'
+
+   20 basic_type: "int"
+   21           | "float"
+   22           | "bool"
+   23           | "string"
+
+   24 type: basic_type
+   25     | "vector" '<' basic_type '>'
+   26     | "matrix" '<' basic_type '>'
+
+   27 var_decl: type "identifier" '=' expr ';'
+   28         | type "identifier" ';'
+   29         | "vector" "identifier" '=' expr ';'
+   30         | "matrix" "identifier" '=' expr ';'
+
+   31 simple_stmt: expr
+   32            | expr '=' expr
+
+   33 condition: '(' expr ')'
+   34          | '(' expr '=' expr ')'
+   35          | '(' error ')'
+
+   36 if_stmt: "if" condition block
+   37        | "if" condition block "else" block
+   38        | "if" condition block "else" if_stmt
+
+   39 $@1: ε
+
+   40 if_stmt: "if" error $@1 block
+   41        | "if" condition error ';'
+   42        | "if" condition block "else" error ';'
+
+   43 while_stmt: "while" condition block
+
+   44 $@2: ε
+
+   45 while_stmt: "while" error $@2 block
+   46           | "while" condition error ';'
+
+   47 for_stmt: "for" '(' for_init ';' expr_opt ';' for_step ')' block
+
+   48 $@3: ε
+
+   49 for_stmt: "for" '(' error ')' $@3 block
+   50         | "for" '(' for_init ';' expr_opt ';' for_step ')' error ';'
+
+   51 for_init: ε
+   52         | type "identifier" '=' expr
+   53         | simple_stmt
+
+   54 for_step: ε
+   55         | simple_stmt
+
+   56 expr_opt: ε
+   57         | expr
+
+   58 switch_stmt: "switch" condition '{' case_list default_opt '}'
+   59            | "switch" condition '{' case_list default_opt switch_error '}'
+
+   60 switch_error: error block
+   61             | error ';'
+   62             | switch_error "case" expr ':' block
+   63             | switch_error "default" ':' block
+
+   64 case_list: ε
+   65          | case_list "case" expr ':' block
+
+   66 default_opt: ε
+   67            | "default" ':' block
+
+   68 func_def: "func" return_type "identifier" '(' params_opt ')' block
+   69         | "func" return_type "identifier" '(' params_opt ')' ';'
+
+   70 return_type: type
+   71            | "void"
+
+   72 params_opt: ε
+   73           | param_list
+
+   74 param_list: param
+   75           | param_list ',' param
+
+   76 param: type "identifier"
+   77      | type "identifier" '=' expr
+
+   78 try_stmt: "try" block "catch" '(' "identifier" ')' block
+   79         | "try" block
+
+   80 assert_stmt: "assert" '(' expr ')' ';'
+   81            | "assert" '(' expr ',' expr ')' ';'
+   82            | "assert" '(' ')' ';'
+
+   83 jump_stmt: "return" ';'
+   84          | "return" expr ';'
+   85          | "break" ';'
+   86          | "continue" ';'
+   87          | "throw" expr ';'
+
+   88 print_stmt: "print" '(' expr_list_opt ')' ';'
+
+   89 invalid_stmt: "else" block
+   90             | "else" if_stmt
+   91             | "case" expr ':' block
+   92             | "default" ':' block
+   93             | "catch" '(' "identifier" ')' block
+
+   94 expr: or_expr
+
+   95 or_expr: and_expr
+   96        | or_expr "||" and_expr
+
+   97 and_expr: eq_expr
+   98         | and_expr "&&" eq_expr
+
+   99 eq_expr: rel_expr
+  100        | eq_expr "==" rel_expr
+  101        | eq_expr "!=" rel_expr
+
+  102 rel_expr: add_expr
+  103         | rel_expr '<' add_expr
+  104         | rel_expr '>' add_expr
+  105         | rel_expr "<=" add_expr
+  106         | rel_expr ">=" add_expr
+
+  107 add_expr: mul_expr
+  108         | add_expr '+' mul_expr
+  109         | add_expr '-' mul_expr
+
+  110 mul_expr: unary
+  111         | mul_expr '*' unary
+  112         | mul_expr '/' unary
+  113         | mul_expr '%' unary
+
+  114 unary: postfix
+  115      | '-' unary
+  116      | '!' unary
+
+  117 postfix: primary
+  118        | postfix '[' expr ']'
+
+  119 primary: "integer literal"
+  120        | "float literal"
+  121        | "string literal"
+  122        | "boolean literal"
+  123        | "identifier"
+  124        | "identifier" '(' args_opt ')'
+  125        | reduction '(' expr ')'
+  126        | '(' expr ')'
+  127        | '[' ']'
+  128        | '[' expr_list ']'
+
+  129 reduction: "sum"
+  130          | "prod"
+  131          | "max"
+  132          | "min"
+  133          | "len"
+
+  134 expr_list_opt: ε
+  135              | expr_list
+
+  136 expr_list: expr
+  137          | expr_list ',' expr
+
+  138 args_opt: ε
+  139         | arg_list
+
+  140 arg_list: arg
+  141         | arg_list ',' arg
+
+  142 arg: expr
+  143    | "identifier" '=' expr
+
+
+Terminals, with rules where they appear
+
+    $end (0) 0
+    '!' (33) 116
+    '%' (37) 113
+    '(' (40) 33 34 35 47 49 50 68 69 78 80 81 82 88 93 124 125 126
+    ')' (41) 33 34 35 47 49 50 68 69 78 80 81 82 88 93 124 125 126
+    '*' (42) 111
+    '+' (43) 108
+    ',' (44) 75 81 137 141
+    '-' (45) 109 115
+    '/' (47) 112
+    ':' (58) 62 63 65 67 91 92
+    ';' (59) 5 17 27 28 29 30 41 42 46 47 50 61 69 80 81 82 83 84 85 86 87 88
+    '<' (60) 25 26 103
+    '=' (61) 27 29 30 32 34 52 77 143
+    '>' (62) 25 26 104
+    '[' (91) 118 127 128
+    ']' (93) 118 127 128
+    '{' (123) 19 58 59
+    '}' (125) 19 58 59
+    error (256) 17 18 35 40 41 42 45 46 49 50 60 61
+    "int" (258) 20
+    "float" (259) 21
+    "bool" (260) 22
+    "string" (261) 23
+    "void" (262) 71
+    "vector" (263) 25 29
+    "matrix" (264) 26 30
+    "func" (265) 68 69
+    "if" (266) 36 37 38 40 41 42
+    "else" (267) 37 38 42 89 90
+    "while" (268) 43 45 46
+    "for" (269) 47 49 50
+    "switch" (270) 58 59
+    "case" (271) 62 65 91
+    "default" (272) 63 67 92
+    "break" (273) 85
+    "continue" (274) 86
+    "return" (275) 83 84
+    "try" (276) 78 79
+    "catch" (277) 78 93
+    "throw" (278) 87
+    "assert" (279) 80 81 82
+    "print" (280) 88
+    "sum" (281) 129
+    "prod" (282) 130
+    "max" (283) 131
+    "min" (284) 132
+    "len" (285) 133
+    "integer literal" <str> (286) 119
+    "float literal" <str> (287) 120
+    "string literal" <str> (288) 121
+    "boolean literal" <str> (289) 122
+    "identifier" <str> (290) 27 28 29 30 52 68 69 76 77 78 93 123 124 143
+    "==" (291) 100
+    "!=" (292) 101
+    "<=" (293) 105
+    ">=" (294) 106
+    "&&" (295) 98
+    "||" (296) 96
+    NO_ELSE (297)
+    NO_CATCH (298)
+
+
+Nonterminals, with rules where they appear
+
+    $accept (62)
+        on left: 0
+    program (63)
+        on left: 1
+        on right: 0
+    stmt_list <node> (64)
+        on left: 2 3
+        on right: 1 3 19
+    stmt <node> (65)
+        on left: 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18
+        on right: 3
+    block <node> (66)
+        on left: 19
+        on right: 6 18 36 37 38 40 42 43 45 47 49 60 62 63 65 67 68 78 79 89 91 92 93
+    basic_type <type> (67)
+        on left: 20 21 22 23
+        on right: 24 25 26
+    type <type> (68)
+        on left: 24 25 26
+        on right: 27 28 52 70 76 77
+    var_decl <node> (69)
+        on left: 27 28 29 30
+        on right: 4
+    simple_stmt <node> (70)
+        on left: 31 32
+        on right: 5 53 55
+    condition <node> (71)
+        on left: 33 34 35
+        on right: 36 37 38 41 42 43 46 58 59
+    if_stmt <node> (72)
+        on left: 36 37 38 40 41 42
+        on right: 7 38 90
+    $@1 (73)
+        on left: 39
+        on right: 40
+    while_stmt <node> (74)
+        on left: 43 45 46
+        on right: 8
+    $@2 (75)
+        on left: 44
+        on right: 45
+    for_stmt <node> (76)
+        on left: 47 49 50
+        on right: 9
+    $@3 (77)
+        on left: 48
+        on right: 49
+    for_init <node> (78)
+        on left: 51 52 53
+        on right: 47 50
+    for_step <node> (79)
+        on left: 54 55
+        on right: 47 50
+    expr_opt <node> (80)
+        on left: 56 57
+        on right: 47 50
+    switch_stmt <node> (81)
+        on left: 58 59
+        on right: 10
+    switch_error (82)
+        on left: 60 61 62 63
+        on right: 59 62 63
+    case_list <node> (83)
+        on left: 64 65
+        on right: 58 59 65
+    default_opt <node> (84)
+        on left: 66 67
+        on right: 58 59
+    func_def <node> (85)
+        on left: 68 69
+        on right: 11
+    return_type <type> (86)
+        on left: 70 71
+        on right: 68 69
+    params_opt <node> (87)
+        on left: 72 73
+        on right: 68 69
+    param_list <node> (88)
+        on left: 74 75
+        on right: 73 75
+    param <node> (89)
+        on left: 76 77
+        on right: 74 75
+    try_stmt <node> (90)
+        on left: 78 79
+        on right: 12
+    assert_stmt <node> (91)
+        on left: 80 81 82
+        on right: 14
+    jump_stmt <node> (92)
+        on left: 83 84 85 86 87
+        on right: 13
+    print_stmt <node> (93)
+        on left: 88
+        on right: 15
+    invalid_stmt <node> (94)
+        on left: 89 90 91 92 93
+        on right: 16
+    expr <node> (95)
+        on left: 94
+        on right: 27 29 30 31 32 33 34 52 57 62 65 77 80 81 84 87 91 118 125 126 136 137 142 143
+    or_expr <node> (96)
+        on left: 95 96
+        on right: 94 96
+    and_expr <node> (97)
+        on left: 97 98
+        on right: 95 96 98
+    eq_expr <node> (98)
+        on left: 99 100 101
+        on right: 97 98 100 101
+    rel_expr <node> (99)
+        on left: 102 103 104 105 106
+        on right: 99 100 101 103 104 105 106
+    add_expr <node> (100)
+        on left: 107 108 109
+        on right: 102 103 104 105 106 108 109
+    mul_expr <node> (101)
+        on left: 110 111 112 113
+        on right: 107 108 109 111 112 113
+    unary <node> (102)
+        on left: 114 115 116
+        on right: 110 111 112 113 115 116
+    postfix <node> (103)
+        on left: 117 118
+        on right: 114 118
+    primary <node> (104)
+        on left: 119 120 121 122 123 124 125 126 127 128
+        on right: 117
+    reduction <op> (105)
+        on left: 129 130 131 132 133
+        on right: 125
+    expr_list_opt <node> (106)
+        on left: 134 135
+        on right: 88
+    expr_list <node> (107)
+        on left: 136 137
+        on right: 128 135 137
+    args_opt <node> (108)
+        on left: 138 139
+        on right: 124
+    arg_list <node> (109)
+        on left: 140 141
+        on right: 139 141
+    arg <node> (110)
+        on left: 142 143
+        on right: 140 141
+
+
+State 0
+
+    0 $accept: • program $end
+
+    $default  reduce using rule 2 (stmt_list)
+
+    program    go to state 1
+    stmt_list  go to state 2
+
+
+State 1
+
+    0 $accept: program • $end
+
+    $end  shift, and go to state 3
+
+
+State 2
+
+    1 program: stmt_list •
+    3 stmt_list: stmt_list • stmt
+
+    error              shift, and go to state 4
+    "int"              shift, and go to state 5
+    "float"            shift, and go to state 6
+    "bool"             shift, and go to state 7
+    "string"           shift, and go to state 8
+    "vector"           shift, and go to state 9
+    "matrix"           shift, and go to state 10
+    "func"             shift, and go to state 11
+    "if"               shift, and go to state 12
+    "else"             shift, and go to state 13
+    "while"            shift, and go to state 14
+    "for"              shift, and go to state 15
+    "switch"           shift, and go to state 16
+    "case"             shift, and go to state 17
+    "default"          shift, and go to state 18
+    "break"            shift, and go to state 19
+    "continue"         shift, and go to state 20
+    "return"           shift, and go to state 21
+    "try"              shift, and go to state 22
+    "catch"            shift, and go to state 23
+    "throw"            shift, and go to state 24
+    "assert"           shift, and go to state 25
+    "print"            shift, and go to state 26
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '{'                shift, and go to state 37
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    $end  reduce using rule 1 (program)
+
+    stmt          go to state 42
+    block         go to state 43
+    basic_type    go to state 44
+    type          go to state 45
+    var_decl      go to state 46
+    simple_stmt   go to state 47
+    if_stmt       go to state 48
+    while_stmt    go to state 49
+    for_stmt      go to state 50
+    switch_stmt   go to state 51
+    func_def      go to state 52
+    try_stmt      go to state 53
+    assert_stmt   go to state 54
+    jump_stmt     go to state 55
+    print_stmt    go to state 56
+    invalid_stmt  go to state 57
+    expr          go to state 58
+    or_expr       go to state 59
+    and_expr      go to state 60
+    eq_expr       go to state 61
+    rel_expr      go to state 62
+    add_expr      go to state 63
+    mul_expr      go to state 64
+    unary         go to state 65
+    postfix       go to state 66
+    primary       go to state 67
+    reduction     go to state 68
+
+
+State 3
+
+    0 $accept: program $end •
+
+    $default  accept
+
+
+State 4
+
+   17 stmt: error • ';'
+   18     | error • block
+
+    ';'  shift, and go to state 69
+    '{'  shift, and go to state 37
+
+    block  go to state 70
+
+
+State 5
+
+   20 basic_type: "int" •
+
+    $default  reduce using rule 20 (basic_type)
+
+
+State 6
+
+   21 basic_type: "float" •
+
+    $default  reduce using rule 21 (basic_type)
+
+
+State 7
+
+   22 basic_type: "bool" •
+
+    $default  reduce using rule 22 (basic_type)
+
+
+State 8
+
+   23 basic_type: "string" •
+
+    $default  reduce using rule 23 (basic_type)
+
+
+State 9
+
+   25 type: "vector" • '<' basic_type '>'
+   29 var_decl: "vector" • "identifier" '=' expr ';'
+
+    "identifier"  shift, and go to state 71
+    '<'           shift, and go to state 72
+
+
+State 10
+
+   26 type: "matrix" • '<' basic_type '>'
+   30 var_decl: "matrix" • "identifier" '=' expr ';'
+
+    "identifier"  shift, and go to state 73
+    '<'           shift, and go to state 74
+
+
+State 11
+
+   68 func_def: "func" • return_type "identifier" '(' params_opt ')' block
+   69         | "func" • return_type "identifier" '(' params_opt ')' ';'
+
+    "int"     shift, and go to state 5
+    "float"   shift, and go to state 6
+    "bool"    shift, and go to state 7
+    "string"  shift, and go to state 8
+    "void"    shift, and go to state 75
+    "vector"  shift, and go to state 76
+    "matrix"  shift, and go to state 77
+
+    basic_type   go to state 44
+    type         go to state 78
+    return_type  go to state 79
+
+
+State 12
+
+   36 if_stmt: "if" • condition block
+   37        | "if" • condition block "else" block
+   38        | "if" • condition block "else" if_stmt
+   40        | "if" • error $@1 block
+   41        | "if" • condition error ';'
+   42        | "if" • condition block "else" error ';'
+
+    error  shift, and go to state 80
+    '('    shift, and go to state 81
+
+    condition  go to state 82
+
+
+State 13
+
+   89 invalid_stmt: "else" • block
+   90             | "else" • if_stmt
+
+    "if"  shift, and go to state 12
+    '{'   shift, and go to state 37
+
+    block    go to state 83
+    if_stmt  go to state 84
+
+
+State 14
+
+   43 while_stmt: "while" • condition block
+   45           | "while" • error $@2 block
+   46           | "while" • condition error ';'
+
+    error  shift, and go to state 85
+    '('    shift, and go to state 81
+
+    condition  go to state 86
+
+
+State 15
+
+   47 for_stmt: "for" • '(' for_init ';' expr_opt ';' for_step ')' block
+   49         | "for" • '(' error ')' $@3 block
+   50         | "for" • '(' for_init ';' expr_opt ';' for_step ')' error ';'
+
+    '('  shift, and go to state 87
+
+
+State 16
+
+   58 switch_stmt: "switch" • condition '{' case_list default_opt '}'
+   59            | "switch" • condition '{' case_list default_opt switch_error '}'
+
+    '('  shift, and go to state 81
+
+    condition  go to state 88
+
+
+State 17
+
+   91 invalid_stmt: "case" • expr ':' block
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 89
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 18
+
+   92 invalid_stmt: "default" • ':' block
+
+    ':'  shift, and go to state 90
+
+
+State 19
+
+   85 jump_stmt: "break" • ';'
+
+    ';'  shift, and go to state 91
+
+
+State 20
+
+   86 jump_stmt: "continue" • ';'
+
+    ';'  shift, and go to state 92
+
+
+State 21
+
+   83 jump_stmt: "return" • ';'
+   84          | "return" • expr ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    ';'                shift, and go to state 93
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 94
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 22
+
+   78 try_stmt: "try" • block "catch" '(' "identifier" ')' block
+   79         | "try" • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 95
+
+
+State 23
+
+   93 invalid_stmt: "catch" • '(' "identifier" ')' block
+
+    '('  shift, and go to state 96
+
+
+State 24
+
+   87 jump_stmt: "throw" • expr ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 97
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 25
+
+   80 assert_stmt: "assert" • '(' expr ')' ';'
+   81            | "assert" • '(' expr ',' expr ')' ';'
+   82            | "assert" • '(' ')' ';'
+
+    '('  shift, and go to state 98
+
+
+State 26
+
+   88 print_stmt: "print" • '(' expr_list_opt ')' ';'
+
+    '('  shift, and go to state 99
+
+
+State 27
+
+  129 reduction: "sum" •
+
+    $default  reduce using rule 129 (reduction)
+
+
+State 28
+
+  130 reduction: "prod" •
+
+    $default  reduce using rule 130 (reduction)
+
+
+State 29
+
+  131 reduction: "max" •
+
+    $default  reduce using rule 131 (reduction)
+
+
+State 30
+
+  132 reduction: "min" •
+
+    $default  reduce using rule 132 (reduction)
+
+
+State 31
+
+  133 reduction: "len" •
+
+    $default  reduce using rule 133 (reduction)
+
+
+State 32
+
+  119 primary: "integer literal" •
+
+    $default  reduce using rule 119 (primary)
+
+
+State 33
+
+  120 primary: "float literal" •
+
+    $default  reduce using rule 120 (primary)
+
+
+State 34
+
+  121 primary: "string literal" •
+
+    $default  reduce using rule 121 (primary)
+
+
+State 35
+
+  122 primary: "boolean literal" •
+
+    $default  reduce using rule 122 (primary)
+
+
+State 36
+
+  123 primary: "identifier" •
+  124        | "identifier" • '(' args_opt ')'
+
+    '('  shift, and go to state 100
+
+    $default  reduce using rule 123 (primary)
+
+
+State 37
+
+   19 block: '{' • stmt_list '}'
+
+    $default  reduce using rule 2 (stmt_list)
+
+    stmt_list  go to state 101
+
+
+State 38
+
+  126 primary: '(' • expr ')'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 102
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 39
+
+  115 unary: '-' • unary
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    unary      go to state 103
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 40
+
+  116 unary: '!' • unary
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    unary      go to state 104
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 41
+
+  127 primary: '[' • ']'
+  128        | '[' • expr_list ']'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+    ']'                shift, and go to state 105
+
+    expr       go to state 106
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+    expr_list  go to state 107
+
+
+State 42
+
+    3 stmt_list: stmt_list stmt •
+
+    $default  reduce using rule 3 (stmt_list)
+
+
+State 43
+
+    6 stmt: block •
+
+    $default  reduce using rule 6 (stmt)
+
+
+State 44
+
+   24 type: basic_type •
+
+    $default  reduce using rule 24 (type)
+
+
+State 45
+
+   27 var_decl: type • "identifier" '=' expr ';'
+   28         | type • "identifier" ';'
+
+    "identifier"  shift, and go to state 108
+
+
+State 46
+
+    4 stmt: var_decl •
+
+    $default  reduce using rule 4 (stmt)
+
+
+State 47
+
+    5 stmt: simple_stmt • ';'
+
+    ';'  shift, and go to state 109
+
+
+State 48
+
+    7 stmt: if_stmt •
+
+    $default  reduce using rule 7 (stmt)
+
+
+State 49
+
+    8 stmt: while_stmt •
+
+    $default  reduce using rule 8 (stmt)
+
+
+State 50
+
+    9 stmt: for_stmt •
+
+    $default  reduce using rule 9 (stmt)
+
+
+State 51
+
+   10 stmt: switch_stmt •
+
+    $default  reduce using rule 10 (stmt)
+
+
+State 52
+
+   11 stmt: func_def •
+
+    $default  reduce using rule 11 (stmt)
+
+
+State 53
+
+   12 stmt: try_stmt •
+
+    $default  reduce using rule 12 (stmt)
+
+
+State 54
+
+   14 stmt: assert_stmt •
+
+    $default  reduce using rule 14 (stmt)
+
+
+State 55
+
+   13 stmt: jump_stmt •
+
+    $default  reduce using rule 13 (stmt)
+
+
+State 56
+
+   15 stmt: print_stmt •
+
+    $default  reduce using rule 15 (stmt)
+
+
+State 57
+
+   16 stmt: invalid_stmt •
+
+    $default  reduce using rule 16 (stmt)
+
+
+State 58
+
+   31 simple_stmt: expr •
+   32            | expr • '=' expr
+
+    '='  shift, and go to state 110
+
+    $default  reduce using rule 31 (simple_stmt)
+
+
+State 59
+
+   94 expr: or_expr •
+   96 or_expr: or_expr • "||" and_expr
+
+    "||"  shift, and go to state 111
+
+    $default  reduce using rule 94 (expr)
+
+
+State 60
+
+   95 or_expr: and_expr •
+   98 and_expr: and_expr • "&&" eq_expr
+
+    "&&"  shift, and go to state 112
+
+    $default  reduce using rule 95 (or_expr)
+
+
+State 61
+
+   97 and_expr: eq_expr •
+  100 eq_expr: eq_expr • "==" rel_expr
+  101        | eq_expr • "!=" rel_expr
+
+    "=="  shift, and go to state 113
+    "!="  shift, and go to state 114
+
+    $default  reduce using rule 97 (and_expr)
+
+
+State 62
+
+   99 eq_expr: rel_expr •
+  103 rel_expr: rel_expr • '<' add_expr
+  104         | rel_expr • '>' add_expr
+  105         | rel_expr • "<=" add_expr
+  106         | rel_expr • ">=" add_expr
+
+    "<="  shift, and go to state 115
+    ">="  shift, and go to state 116
+    '<'   shift, and go to state 117
+    '>'   shift, and go to state 118
+
+    $default  reduce using rule 99 (eq_expr)
+
+
+State 63
+
+  102 rel_expr: add_expr •
+  108 add_expr: add_expr • '+' mul_expr
+  109         | add_expr • '-' mul_expr
+
+    '+'  shift, and go to state 119
+    '-'  shift, and go to state 120
+
+    $default  reduce using rule 102 (rel_expr)
+
+
+State 64
+
+  107 add_expr: mul_expr •
+  111 mul_expr: mul_expr • '*' unary
+  112         | mul_expr • '/' unary
+  113         | mul_expr • '%' unary
+
+    '*'  shift, and go to state 121
+    '/'  shift, and go to state 122
+    '%'  shift, and go to state 123
+
+    $default  reduce using rule 107 (add_expr)
+
+
+State 65
+
+  110 mul_expr: unary •
+
+    $default  reduce using rule 110 (mul_expr)
+
+
+State 66
+
+  114 unary: postfix •
+  118 postfix: postfix • '[' expr ']'
+
+    '['  shift, and go to state 124
+
+    $default  reduce using rule 114 (unary)
+
+
+State 67
+
+  117 postfix: primary •
+
+    $default  reduce using rule 117 (postfix)
+
+
+State 68
+
+  125 primary: reduction • '(' expr ')'
+
+    '('  shift, and go to state 125
+
+
+State 69
+
+   17 stmt: error ';' •
+
+    $default  reduce using rule 17 (stmt)
+
+
+State 70
+
+   18 stmt: error block •
+
+    $default  reduce using rule 18 (stmt)
+
+
+State 71
+
+   29 var_decl: "vector" "identifier" • '=' expr ';'
+
+    '='  shift, and go to state 126
+
+
+State 72
+
+   25 type: "vector" '<' • basic_type '>'
+
+    "int"     shift, and go to state 5
+    "float"   shift, and go to state 6
+    "bool"    shift, and go to state 7
+    "string"  shift, and go to state 8
+
+    basic_type  go to state 127
+
+
+State 73
+
+   30 var_decl: "matrix" "identifier" • '=' expr ';'
+
+    '='  shift, and go to state 128
+
+
+State 74
+
+   26 type: "matrix" '<' • basic_type '>'
+
+    "int"     shift, and go to state 5
+    "float"   shift, and go to state 6
+    "bool"    shift, and go to state 7
+    "string"  shift, and go to state 8
+
+    basic_type  go to state 129
+
+
+State 75
+
+   71 return_type: "void" •
+
+    $default  reduce using rule 71 (return_type)
+
+
+State 76
+
+   25 type: "vector" • '<' basic_type '>'
+
+    '<'  shift, and go to state 72
+
+
+State 77
+
+   26 type: "matrix" • '<' basic_type '>'
+
+    '<'  shift, and go to state 74
+
+
+State 78
+
+   70 return_type: type •
+
+    $default  reduce using rule 70 (return_type)
+
+
+State 79
+
+   68 func_def: "func" return_type • "identifier" '(' params_opt ')' block
+   69         | "func" return_type • "identifier" '(' params_opt ')' ';'
+
+    "identifier"  shift, and go to state 130
+
+
+State 80
+
+   40 if_stmt: "if" error • $@1 block
+
+    $default  reduce using rule 39 ($@1)
+
+    $@1  go to state 131
+
+
+State 81
+
+   33 condition: '(' • expr ')'
+   34          | '(' • expr '=' expr ')'
+   35          | '(' • error ')'
+
+    error              shift, and go to state 132
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 133
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 82
+
+   36 if_stmt: "if" condition • block
+   37        | "if" condition • block "else" block
+   38        | "if" condition • block "else" if_stmt
+   41        | "if" condition • error ';'
+   42        | "if" condition • block "else" error ';'
+
+    error  shift, and go to state 134
+    '{'    shift, and go to state 37
+
+    block  go to state 135
+
+
+State 83
+
+   89 invalid_stmt: "else" block •
+
+    $default  reduce using rule 89 (invalid_stmt)
+
+
+State 84
+
+   90 invalid_stmt: "else" if_stmt •
+
+    $default  reduce using rule 90 (invalid_stmt)
+
+
+State 85
+
+   45 while_stmt: "while" error • $@2 block
+
+    $default  reduce using rule 44 ($@2)
+
+    $@2  go to state 136
+
+
+State 86
+
+   43 while_stmt: "while" condition • block
+   46           | "while" condition • error ';'
+
+    error  shift, and go to state 137
+    '{'    shift, and go to state 37
+
+    block  go to state 138
+
+
+State 87
+
+   47 for_stmt: "for" '(' • for_init ';' expr_opt ';' for_step ')' block
+   49         | "for" '(' • error ')' $@3 block
+   50         | "for" '(' • for_init ';' expr_opt ';' for_step ')' error ';'
+
+    error              shift, and go to state 139
+    "int"              shift, and go to state 5
+    "float"            shift, and go to state 6
+    "bool"             shift, and go to state 7
+    "string"           shift, and go to state 8
+    "vector"           shift, and go to state 76
+    "matrix"           shift, and go to state 77
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    ';'  reduce using rule 51 (for_init)
+
+    basic_type   go to state 44
+    type         go to state 140
+    simple_stmt  go to state 141
+    for_init     go to state 142
+    expr         go to state 58
+    or_expr      go to state 59
+    and_expr     go to state 60
+    eq_expr      go to state 61
+    rel_expr     go to state 62
+    add_expr     go to state 63
+    mul_expr     go to state 64
+    unary        go to state 65
+    postfix      go to state 66
+    primary      go to state 67
+    reduction    go to state 68
+
+
+State 88
+
+   58 switch_stmt: "switch" condition • '{' case_list default_opt '}'
+   59            | "switch" condition • '{' case_list default_opt switch_error '}'
+
+    '{'  shift, and go to state 143
+
+
+State 89
+
+   91 invalid_stmt: "case" expr • ':' block
+
+    ':'  shift, and go to state 144
+
+
+State 90
+
+   92 invalid_stmt: "default" ':' • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 145
+
+
+State 91
+
+   85 jump_stmt: "break" ';' •
+
+    $default  reduce using rule 85 (jump_stmt)
+
+
+State 92
+
+   86 jump_stmt: "continue" ';' •
+
+    $default  reduce using rule 86 (jump_stmt)
+
+
+State 93
+
+   83 jump_stmt: "return" ';' •
+
+    $default  reduce using rule 83 (jump_stmt)
+
+
+State 94
+
+   84 jump_stmt: "return" expr • ';'
+
+    ';'  shift, and go to state 146
+
+
+State 95
+
+   78 try_stmt: "try" block • "catch" '(' "identifier" ')' block
+   79         | "try" block •
+
+    "catch"  shift, and go to state 147
+
+    $default  reduce using rule 79 (try_stmt)
+
+
+State 96
+
+   93 invalid_stmt: "catch" '(' • "identifier" ')' block
+
+    "identifier"  shift, and go to state 148
+
+
+State 97
+
+   87 jump_stmt: "throw" expr • ';'
+
+    ';'  shift, and go to state 149
+
+
+State 98
+
+   80 assert_stmt: "assert" '(' • expr ')' ';'
+   81            | "assert" '(' • expr ',' expr ')' ';'
+   82            | "assert" '(' • ')' ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    ')'                shift, and go to state 150
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 151
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 99
+
+   88 print_stmt: "print" '(' • expr_list_opt ')' ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    $default  reduce using rule 134 (expr_list_opt)
+
+    expr           go to state 106
+    or_expr        go to state 59
+    and_expr       go to state 60
+    eq_expr        go to state 61
+    rel_expr       go to state 62
+    add_expr       go to state 63
+    mul_expr       go to state 64
+    unary          go to state 65
+    postfix        go to state 66
+    primary        go to state 67
+    reduction      go to state 68
+    expr_list_opt  go to state 152
+    expr_list      go to state 153
+
+
+State 100
+
+  124 primary: "identifier" '(' • args_opt ')'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 154
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    $default  reduce using rule 138 (args_opt)
+
+    expr       go to state 155
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+    args_opt   go to state 156
+    arg_list   go to state 157
+    arg        go to state 158
+
+
+State 101
+
+    3 stmt_list: stmt_list • stmt
+   19 block: '{' stmt_list • '}'
+
+    error              shift, and go to state 4
+    "int"              shift, and go to state 5
+    "float"            shift, and go to state 6
+    "bool"             shift, and go to state 7
+    "string"           shift, and go to state 8
+    "vector"           shift, and go to state 9
+    "matrix"           shift, and go to state 10
+    "func"             shift, and go to state 11
+    "if"               shift, and go to state 12
+    "else"             shift, and go to state 13
+    "while"            shift, and go to state 14
+    "for"              shift, and go to state 15
+    "switch"           shift, and go to state 16
+    "case"             shift, and go to state 17
+    "default"          shift, and go to state 18
+    "break"            shift, and go to state 19
+    "continue"         shift, and go to state 20
+    "return"           shift, and go to state 21
+    "try"              shift, and go to state 22
+    "catch"            shift, and go to state 23
+    "throw"            shift, and go to state 24
+    "assert"           shift, and go to state 25
+    "print"            shift, and go to state 26
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '{'                shift, and go to state 37
+    '}'                shift, and go to state 159
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    stmt          go to state 42
+    block         go to state 43
+    basic_type    go to state 44
+    type          go to state 45
+    var_decl      go to state 46
+    simple_stmt   go to state 47
+    if_stmt       go to state 48
+    while_stmt    go to state 49
+    for_stmt      go to state 50
+    switch_stmt   go to state 51
+    func_def      go to state 52
+    try_stmt      go to state 53
+    assert_stmt   go to state 54
+    jump_stmt     go to state 55
+    print_stmt    go to state 56
+    invalid_stmt  go to state 57
+    expr          go to state 58
+    or_expr       go to state 59
+    and_expr      go to state 60
+    eq_expr       go to state 61
+    rel_expr      go to state 62
+    add_expr      go to state 63
+    mul_expr      go to state 64
+    unary         go to state 65
+    postfix       go to state 66
+    primary       go to state 67
+    reduction     go to state 68
+
+
+State 102
+
+  126 primary: '(' expr • ')'
+
+    ')'  shift, and go to state 160
+
+
+State 103
+
+  115 unary: '-' unary •
+
+    $default  reduce using rule 115 (unary)
+
+
+State 104
+
+  116 unary: '!' unary •
+
+    $default  reduce using rule 116 (unary)
+
+
+State 105
+
+  127 primary: '[' ']' •
+
+    $default  reduce using rule 127 (primary)
+
+
+State 106
+
+  136 expr_list: expr •
+
+    $default  reduce using rule 136 (expr_list)
+
+
+State 107
+
+  128 primary: '[' expr_list • ']'
+  137 expr_list: expr_list • ',' expr
+
+    ','  shift, and go to state 161
+    ']'  shift, and go to state 162
+
+
+State 108
+
+   27 var_decl: type "identifier" • '=' expr ';'
+   28         | type "identifier" • ';'
+
+    ';'  shift, and go to state 163
+    '='  shift, and go to state 164
+
+
+State 109
+
+    5 stmt: simple_stmt ';' •
+
+    $default  reduce using rule 5 (stmt)
+
+
+State 110
+
+   32 simple_stmt: expr '=' • expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 165
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 111
+
+   96 or_expr: or_expr "||" • and_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    and_expr   go to state 166
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 112
+
+   98 and_expr: and_expr "&&" • eq_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    eq_expr    go to state 167
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 113
+
+  100 eq_expr: eq_expr "==" • rel_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    rel_expr   go to state 168
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 114
+
+  101 eq_expr: eq_expr "!=" • rel_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    rel_expr   go to state 169
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 115
+
+  105 rel_expr: rel_expr "<=" • add_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    add_expr   go to state 170
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 116
+
+  106 rel_expr: rel_expr ">=" • add_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    add_expr   go to state 171
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 117
+
+  103 rel_expr: rel_expr '<' • add_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    add_expr   go to state 172
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 118
+
+  104 rel_expr: rel_expr '>' • add_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    add_expr   go to state 173
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 119
+
+  108 add_expr: add_expr '+' • mul_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    mul_expr   go to state 174
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 120
+
+  109 add_expr: add_expr '-' • mul_expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    mul_expr   go to state 175
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 121
+
+  111 mul_expr: mul_expr '*' • unary
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    unary      go to state 176
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 122
+
+  112 mul_expr: mul_expr '/' • unary
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    unary      go to state 177
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 123
+
+  113 mul_expr: mul_expr '%' • unary
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    unary      go to state 178
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 124
+
+  118 postfix: postfix '[' • expr ']'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 179
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 125
+
+  125 primary: reduction '(' • expr ')'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 180
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 126
+
+   29 var_decl: "vector" "identifier" '=' • expr ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 181
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 127
+
+   25 type: "vector" '<' basic_type • '>'
+
+    '>'  shift, and go to state 182
+
+
+State 128
+
+   30 var_decl: "matrix" "identifier" '=' • expr ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 183
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 129
+
+   26 type: "matrix" '<' basic_type • '>'
+
+    '>'  shift, and go to state 184
+
+
+State 130
+
+   68 func_def: "func" return_type "identifier" • '(' params_opt ')' block
+   69         | "func" return_type "identifier" • '(' params_opt ')' ';'
+
+    '('  shift, and go to state 185
+
+
+State 131
+
+   40 if_stmt: "if" error $@1 • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 186
+
+
+State 132
+
+   35 condition: '(' error • ')'
+
+    ')'  shift, and go to state 187
+
+
+State 133
+
+   33 condition: '(' expr • ')'
+   34          | '(' expr • '=' expr ')'
+
+    '='  shift, and go to state 188
+    ')'  shift, and go to state 189
+
+
+State 134
+
+   41 if_stmt: "if" condition error • ';'
+
+    ';'  shift, and go to state 190
+
+
+State 135
+
+   36 if_stmt: "if" condition block •
+   37        | "if" condition block • "else" block
+   38        | "if" condition block • "else" if_stmt
+   42        | "if" condition block • "else" error ';'
+
+    "else"  shift, and go to state 191
+
+    $default  reduce using rule 36 (if_stmt)
+
+
+State 136
+
+   45 while_stmt: "while" error $@2 • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 192
+
+
+State 137
+
+   46 while_stmt: "while" condition error • ';'
+
+    ';'  shift, and go to state 193
+
+
+State 138
+
+   43 while_stmt: "while" condition block •
+
+    $default  reduce using rule 43 (while_stmt)
+
+
+State 139
+
+   49 for_stmt: "for" '(' error • ')' $@3 block
+
+    ')'  shift, and go to state 194
+
+
+State 140
+
+   52 for_init: type • "identifier" '=' expr
+
+    "identifier"  shift, and go to state 195
+
+
+State 141
+
+   53 for_init: simple_stmt •
+
+    $default  reduce using rule 53 (for_init)
+
+
+State 142
+
+   47 for_stmt: "for" '(' for_init • ';' expr_opt ';' for_step ')' block
+   50         | "for" '(' for_init • ';' expr_opt ';' for_step ')' error ';'
+
+    ';'  shift, and go to state 196
+
+
+State 143
+
+   58 switch_stmt: "switch" condition '{' • case_list default_opt '}'
+   59            | "switch" condition '{' • case_list default_opt switch_error '}'
+
+    $default  reduce using rule 64 (case_list)
+
+    case_list  go to state 197
+
+
+State 144
+
+   91 invalid_stmt: "case" expr ':' • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 198
+
+
+State 145
+
+   92 invalid_stmt: "default" ':' block •
+
+    $default  reduce using rule 92 (invalid_stmt)
+
+
+State 146
+
+   84 jump_stmt: "return" expr ';' •
+
+    $default  reduce using rule 84 (jump_stmt)
+
+
+State 147
+
+   78 try_stmt: "try" block "catch" • '(' "identifier" ')' block
+
+    '('  shift, and go to state 199
+
+
+State 148
+
+   93 invalid_stmt: "catch" '(' "identifier" • ')' block
+
+    ')'  shift, and go to state 200
+
+
+State 149
+
+   87 jump_stmt: "throw" expr ';' •
+
+    $default  reduce using rule 87 (jump_stmt)
+
+
+State 150
+
+   82 assert_stmt: "assert" '(' ')' • ';'
+
+    ';'  shift, and go to state 201
+
+
+State 151
+
+   80 assert_stmt: "assert" '(' expr • ')' ';'
+   81            | "assert" '(' expr • ',' expr ')' ';'
+
+    ')'  shift, and go to state 202
+    ','  shift, and go to state 203
+
+
+State 152
+
+   88 print_stmt: "print" '(' expr_list_opt • ')' ';'
+
+    ')'  shift, and go to state 204
+
+
+State 153
+
+  135 expr_list_opt: expr_list •
+  137 expr_list: expr_list • ',' expr
+
+    ','  shift, and go to state 161
+
+    $default  reduce using rule 135 (expr_list_opt)
+
+
+State 154
+
+  123 primary: "identifier" •
+  124        | "identifier" • '(' args_opt ')'
+  143 arg: "identifier" • '=' expr
+
+    '='  shift, and go to state 205
+    '('  shift, and go to state 100
+
+    $default  reduce using rule 123 (primary)
+
+
+State 155
+
+  142 arg: expr •
+
+    $default  reduce using rule 142 (arg)
+
+
+State 156
+
+  124 primary: "identifier" '(' args_opt • ')'
+
+    ')'  shift, and go to state 206
+
+
+State 157
+
+  139 args_opt: arg_list •
+  141 arg_list: arg_list • ',' arg
+
+    ','  shift, and go to state 207
+
+    $default  reduce using rule 139 (args_opt)
+
+
+State 158
+
+  140 arg_list: arg •
+
+    $default  reduce using rule 140 (arg_list)
+
+
+State 159
+
+   19 block: '{' stmt_list '}' •
+
+    $default  reduce using rule 19 (block)
+
+
+State 160
+
+  126 primary: '(' expr ')' •
+
+    $default  reduce using rule 126 (primary)
+
+
+State 161
+
+  137 expr_list: expr_list ',' • expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 208
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 162
+
+  128 primary: '[' expr_list ']' •
+
+    $default  reduce using rule 128 (primary)
+
+
+State 163
+
+   28 var_decl: type "identifier" ';' •
+
+    $default  reduce using rule 28 (var_decl)
+
+
+State 164
+
+   27 var_decl: type "identifier" '=' • expr ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 209
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 165
+
+   32 simple_stmt: expr '=' expr •
+
+    $default  reduce using rule 32 (simple_stmt)
+
+
+State 166
+
+   96 or_expr: or_expr "||" and_expr •
+   98 and_expr: and_expr • "&&" eq_expr
+
+    "&&"  shift, and go to state 112
+
+    $default  reduce using rule 96 (or_expr)
+
+
+State 167
+
+   98 and_expr: and_expr "&&" eq_expr •
+  100 eq_expr: eq_expr • "==" rel_expr
+  101        | eq_expr • "!=" rel_expr
+
+    "=="  shift, and go to state 113
+    "!="  shift, and go to state 114
+
+    $default  reduce using rule 98 (and_expr)
+
+
+State 168
+
+  100 eq_expr: eq_expr "==" rel_expr •
+  103 rel_expr: rel_expr • '<' add_expr
+  104         | rel_expr • '>' add_expr
+  105         | rel_expr • "<=" add_expr
+  106         | rel_expr • ">=" add_expr
+
+    "<="  shift, and go to state 115
+    ">="  shift, and go to state 116
+    '<'   shift, and go to state 117
+    '>'   shift, and go to state 118
+
+    $default  reduce using rule 100 (eq_expr)
+
+
+State 169
+
+  101 eq_expr: eq_expr "!=" rel_expr •
+  103 rel_expr: rel_expr • '<' add_expr
+  104         | rel_expr • '>' add_expr
+  105         | rel_expr • "<=" add_expr
+  106         | rel_expr • ">=" add_expr
+
+    "<="  shift, and go to state 115
+    ">="  shift, and go to state 116
+    '<'   shift, and go to state 117
+    '>'   shift, and go to state 118
+
+    $default  reduce using rule 101 (eq_expr)
+
+
+State 170
+
+  105 rel_expr: rel_expr "<=" add_expr •
+  108 add_expr: add_expr • '+' mul_expr
+  109         | add_expr • '-' mul_expr
+
+    '+'  shift, and go to state 119
+    '-'  shift, and go to state 120
+
+    $default  reduce using rule 105 (rel_expr)
+
+
+State 171
+
+  106 rel_expr: rel_expr ">=" add_expr •
+  108 add_expr: add_expr • '+' mul_expr
+  109         | add_expr • '-' mul_expr
+
+    '+'  shift, and go to state 119
+    '-'  shift, and go to state 120
+
+    $default  reduce using rule 106 (rel_expr)
+
+
+State 172
+
+  103 rel_expr: rel_expr '<' add_expr •
+  108 add_expr: add_expr • '+' mul_expr
+  109         | add_expr • '-' mul_expr
+
+    '+'  shift, and go to state 119
+    '-'  shift, and go to state 120
+
+    $default  reduce using rule 103 (rel_expr)
+
+
+State 173
+
+  104 rel_expr: rel_expr '>' add_expr •
+  108 add_expr: add_expr • '+' mul_expr
+  109         | add_expr • '-' mul_expr
+
+    '+'  shift, and go to state 119
+    '-'  shift, and go to state 120
+
+    $default  reduce using rule 104 (rel_expr)
+
+
+State 174
+
+  108 add_expr: add_expr '+' mul_expr •
+  111 mul_expr: mul_expr • '*' unary
+  112         | mul_expr • '/' unary
+  113         | mul_expr • '%' unary
+
+    '*'  shift, and go to state 121
+    '/'  shift, and go to state 122
+    '%'  shift, and go to state 123
+
+    $default  reduce using rule 108 (add_expr)
+
+
+State 175
+
+  109 add_expr: add_expr '-' mul_expr •
+  111 mul_expr: mul_expr • '*' unary
+  112         | mul_expr • '/' unary
+  113         | mul_expr • '%' unary
+
+    '*'  shift, and go to state 121
+    '/'  shift, and go to state 122
+    '%'  shift, and go to state 123
+
+    $default  reduce using rule 109 (add_expr)
+
+
+State 176
+
+  111 mul_expr: mul_expr '*' unary •
+
+    $default  reduce using rule 111 (mul_expr)
+
+
+State 177
+
+  112 mul_expr: mul_expr '/' unary •
+
+    $default  reduce using rule 112 (mul_expr)
+
+
+State 178
+
+  113 mul_expr: mul_expr '%' unary •
+
+    $default  reduce using rule 113 (mul_expr)
+
+
+State 179
+
+  118 postfix: postfix '[' expr • ']'
+
+    ']'  shift, and go to state 210
+
+
+State 180
+
+  125 primary: reduction '(' expr • ')'
+
+    ')'  shift, and go to state 211
+
+
+State 181
+
+   29 var_decl: "vector" "identifier" '=' expr • ';'
+
+    ';'  shift, and go to state 212
+
+
+State 182
+
+   25 type: "vector" '<' basic_type '>' •
+
+    $default  reduce using rule 25 (type)
+
+
+State 183
+
+   30 var_decl: "matrix" "identifier" '=' expr • ';'
+
+    ';'  shift, and go to state 213
+
+
+State 184
+
+   26 type: "matrix" '<' basic_type '>' •
+
+    $default  reduce using rule 26 (type)
+
+
+State 185
+
+   68 func_def: "func" return_type "identifier" '(' • params_opt ')' block
+   69         | "func" return_type "identifier" '(' • params_opt ')' ';'
+
+    "int"     shift, and go to state 5
+    "float"   shift, and go to state 6
+    "bool"    shift, and go to state 7
+    "string"  shift, and go to state 8
+    "vector"  shift, and go to state 76
+    "matrix"  shift, and go to state 77
+
+    $default  reduce using rule 72 (params_opt)
+
+    basic_type  go to state 44
+    type        go to state 214
+    params_opt  go to state 215
+    param_list  go to state 216
+    param       go to state 217
+
+
+State 186
+
+   40 if_stmt: "if" error $@1 block •
+
+    $default  reduce using rule 40 (if_stmt)
+
+
+State 187
+
+   35 condition: '(' error ')' •
+
+    $default  reduce using rule 35 (condition)
+
+
+State 188
+
+   34 condition: '(' expr '=' • expr ')'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 218
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 189
+
+   33 condition: '(' expr ')' •
+
+    $default  reduce using rule 33 (condition)
+
+
+State 190
+
+   41 if_stmt: "if" condition error ';' •
+
+    $default  reduce using rule 41 (if_stmt)
+
+
+State 191
+
+   37 if_stmt: "if" condition block "else" • block
+   38        | "if" condition block "else" • if_stmt
+   42        | "if" condition block "else" • error ';'
+
+    error  shift, and go to state 219
+    "if"   shift, and go to state 12
+    '{'    shift, and go to state 37
+
+    block    go to state 220
+    if_stmt  go to state 221
+
+
+State 192
+
+   45 while_stmt: "while" error $@2 block •
+
+    $default  reduce using rule 45 (while_stmt)
+
+
+State 193
+
+   46 while_stmt: "while" condition error ';' •
+
+    $default  reduce using rule 46 (while_stmt)
+
+
+State 194
+
+   49 for_stmt: "for" '(' error ')' • $@3 block
+
+    $default  reduce using rule 48 ($@3)
+
+    $@3  go to state 222
+
+
+State 195
+
+   52 for_init: type "identifier" • '=' expr
+
+    '='  shift, and go to state 223
+
+
+State 196
+
+   47 for_stmt: "for" '(' for_init ';' • expr_opt ';' for_step ')' block
+   50         | "for" '(' for_init ';' • expr_opt ';' for_step ')' error ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    $default  reduce using rule 56 (expr_opt)
+
+    expr_opt   go to state 224
+    expr       go to state 225
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 197
+
+   58 switch_stmt: "switch" condition '{' case_list • default_opt '}'
+   59            | "switch" condition '{' case_list • default_opt switch_error '}'
+   65 case_list: case_list • "case" expr ':' block
+
+    "case"     shift, and go to state 226
+    "default"  shift, and go to state 227
+
+    $default  reduce using rule 66 (default_opt)
+
+    default_opt  go to state 228
+
+
+State 198
+
+   91 invalid_stmt: "case" expr ':' block •
+
+    $default  reduce using rule 91 (invalid_stmt)
+
+
+State 199
+
+   78 try_stmt: "try" block "catch" '(' • "identifier" ')' block
+
+    "identifier"  shift, and go to state 229
+
+
+State 200
+
+   93 invalid_stmt: "catch" '(' "identifier" ')' • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 230
+
+
+State 201
+
+   82 assert_stmt: "assert" '(' ')' ';' •
+
+    $default  reduce using rule 82 (assert_stmt)
+
+
+State 202
+
+   80 assert_stmt: "assert" '(' expr ')' • ';'
+
+    ';'  shift, and go to state 231
+
+
+State 203
+
+   81 assert_stmt: "assert" '(' expr ',' • expr ')' ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 232
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 204
+
+   88 print_stmt: "print" '(' expr_list_opt ')' • ';'
+
+    ';'  shift, and go to state 233
+
+
+State 205
+
+  143 arg: "identifier" '=' • expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 234
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 206
+
+  124 primary: "identifier" '(' args_opt ')' •
+
+    $default  reduce using rule 124 (primary)
+
+
+State 207
+
+  141 arg_list: arg_list ',' • arg
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 154
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 155
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+    arg        go to state 235
+
+
+State 208
+
+  137 expr_list: expr_list ',' expr •
+
+    $default  reduce using rule 137 (expr_list)
+
+
+State 209
+
+   27 var_decl: type "identifier" '=' expr • ';'
+
+    ';'  shift, and go to state 236
+
+
+State 210
+
+  118 postfix: postfix '[' expr ']' •
+
+    $default  reduce using rule 118 (postfix)
+
+
+State 211
+
+  125 primary: reduction '(' expr ')' •
+
+    $default  reduce using rule 125 (primary)
+
+
+State 212
+
+   29 var_decl: "vector" "identifier" '=' expr ';' •
+
+    $default  reduce using rule 29 (var_decl)
+
+
+State 213
+
+   30 var_decl: "matrix" "identifier" '=' expr ';' •
+
+    $default  reduce using rule 30 (var_decl)
+
+
+State 214
+
+   76 param: type • "identifier"
+   77      | type • "identifier" '=' expr
+
+    "identifier"  shift, and go to state 237
+
+
+State 215
+
+   68 func_def: "func" return_type "identifier" '(' params_opt • ')' block
+   69         | "func" return_type "identifier" '(' params_opt • ')' ';'
+
+    ')'  shift, and go to state 238
+
+
+State 216
+
+   73 params_opt: param_list •
+   75 param_list: param_list • ',' param
+
+    ','  shift, and go to state 239
+
+    $default  reduce using rule 73 (params_opt)
+
+
+State 217
+
+   74 param_list: param •
+
+    $default  reduce using rule 74 (param_list)
+
+
+State 218
+
+   34 condition: '(' expr '=' expr • ')'
+
+    ')'  shift, and go to state 240
+
+
+State 219
+
+   42 if_stmt: "if" condition block "else" error • ';'
+
+    ';'  shift, and go to state 241
+
+
+State 220
+
+   37 if_stmt: "if" condition block "else" block •
+
+    $default  reduce using rule 37 (if_stmt)
+
+
+State 221
+
+   38 if_stmt: "if" condition block "else" if_stmt •
+
+    $default  reduce using rule 38 (if_stmt)
+
+
+State 222
+
+   49 for_stmt: "for" '(' error ')' $@3 • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 242
+
+
+State 223
+
+   52 for_init: type "identifier" '=' • expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 243
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 224
+
+   47 for_stmt: "for" '(' for_init ';' expr_opt • ';' for_step ')' block
+   50         | "for" '(' for_init ';' expr_opt • ';' for_step ')' error ';'
+
+    ';'  shift, and go to state 244
+
+
+State 225
+
+   57 expr_opt: expr •
+
+    $default  reduce using rule 57 (expr_opt)
+
+
+State 226
+
+   65 case_list: case_list "case" • expr ':' block
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 245
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 227
+
+   67 default_opt: "default" • ':' block
+
+    ':'  shift, and go to state 246
+
+
+State 228
+
+   58 switch_stmt: "switch" condition '{' case_list default_opt • '}'
+   59            | "switch" condition '{' case_list default_opt • switch_error '}'
+
+    error  shift, and go to state 247
+    '}'    shift, and go to state 248
+
+    switch_error  go to state 249
+
+
+State 229
+
+   78 try_stmt: "try" block "catch" '(' "identifier" • ')' block
+
+    ')'  shift, and go to state 250
+
+
+State 230
+
+   93 invalid_stmt: "catch" '(' "identifier" ')' block •
+
+    $default  reduce using rule 93 (invalid_stmt)
+
+
+State 231
+
+   80 assert_stmt: "assert" '(' expr ')' ';' •
+
+    $default  reduce using rule 80 (assert_stmt)
+
+
+State 232
+
+   81 assert_stmt: "assert" '(' expr ',' expr • ')' ';'
+
+    ')'  shift, and go to state 251
+
+
+State 233
+
+   88 print_stmt: "print" '(' expr_list_opt ')' ';' •
+
+    $default  reduce using rule 88 (print_stmt)
+
+
+State 234
+
+  143 arg: "identifier" '=' expr •
+
+    $default  reduce using rule 143 (arg)
+
+
+State 235
+
+  141 arg_list: arg_list ',' arg •
+
+    $default  reduce using rule 141 (arg_list)
+
+
+State 236
+
+   27 var_decl: type "identifier" '=' expr ';' •
+
+    $default  reduce using rule 27 (var_decl)
+
+
+State 237
+
+   76 param: type "identifier" •
+   77      | type "identifier" • '=' expr
+
+    '='  shift, and go to state 252
+
+    $default  reduce using rule 76 (param)
+
+
+State 238
+
+   68 func_def: "func" return_type "identifier" '(' params_opt ')' • block
+   69         | "func" return_type "identifier" '(' params_opt ')' • ';'
+
+    ';'  shift, and go to state 253
+    '{'  shift, and go to state 37
+
+    block  go to state 254
+
+
+State 239
+
+   75 param_list: param_list ',' • param
+
+    "int"     shift, and go to state 5
+    "float"   shift, and go to state 6
+    "bool"    shift, and go to state 7
+    "string"  shift, and go to state 8
+    "vector"  shift, and go to state 76
+    "matrix"  shift, and go to state 77
+
+    basic_type  go to state 44
+    type        go to state 214
+    param       go to state 255
+
+
+State 240
+
+   34 condition: '(' expr '=' expr ')' •
+
+    $default  reduce using rule 34 (condition)
+
+
+State 241
+
+   42 if_stmt: "if" condition block "else" error ';' •
+
+    $default  reduce using rule 42 (if_stmt)
+
+
+State 242
+
+   49 for_stmt: "for" '(' error ')' $@3 block •
+
+    $default  reduce using rule 49 (for_stmt)
+
+
+State 243
+
+   52 for_init: type "identifier" '=' expr •
+
+    $default  reduce using rule 52 (for_init)
+
+
+State 244
+
+   47 for_stmt: "for" '(' for_init ';' expr_opt ';' • for_step ')' block
+   50         | "for" '(' for_init ';' expr_opt ';' • for_step ')' error ';'
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    $default  reduce using rule 54 (for_step)
+
+    simple_stmt  go to state 256
+    for_step     go to state 257
+    expr         go to state 58
+    or_expr      go to state 59
+    and_expr     go to state 60
+    eq_expr      go to state 61
+    rel_expr     go to state 62
+    add_expr     go to state 63
+    mul_expr     go to state 64
+    unary        go to state 65
+    postfix      go to state 66
+    primary      go to state 67
+    reduction    go to state 68
+
+
+State 245
+
+   65 case_list: case_list "case" expr • ':' block
+
+    ':'  shift, and go to state 258
+
+
+State 246
+
+   67 default_opt: "default" ':' • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 259
+
+
+State 247
+
+   60 switch_error: error • block
+   61             | error • ';'
+
+    ';'  shift, and go to state 260
+    '{'  shift, and go to state 37
+
+    block  go to state 261
+
+
+State 248
+
+   58 switch_stmt: "switch" condition '{' case_list default_opt '}' •
+
+    $default  reduce using rule 58 (switch_stmt)
+
+
+State 249
+
+   59 switch_stmt: "switch" condition '{' case_list default_opt switch_error • '}'
+   62 switch_error: switch_error • "case" expr ':' block
+   63             | switch_error • "default" ':' block
+
+    "case"     shift, and go to state 262
+    "default"  shift, and go to state 263
+    '}'        shift, and go to state 264
+
+
+State 250
+
+   78 try_stmt: "try" block "catch" '(' "identifier" ')' • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 265
+
+
+State 251
+
+   81 assert_stmt: "assert" '(' expr ',' expr ')' • ';'
+
+    ';'  shift, and go to state 266
+
+
+State 252
+
+   77 param: type "identifier" '=' • expr
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 267
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 253
+
+   69 func_def: "func" return_type "identifier" '(' params_opt ')' ';' •
+
+    $default  reduce using rule 69 (func_def)
+
+
+State 254
+
+   68 func_def: "func" return_type "identifier" '(' params_opt ')' block •
+
+    $default  reduce using rule 68 (func_def)
+
+
+State 255
+
+   75 param_list: param_list ',' param •
+
+    $default  reduce using rule 75 (param_list)
+
+
+State 256
+
+   55 for_step: simple_stmt •
+
+    $default  reduce using rule 55 (for_step)
+
+
+State 257
+
+   47 for_stmt: "for" '(' for_init ';' expr_opt ';' for_step • ')' block
+   50         | "for" '(' for_init ';' expr_opt ';' for_step • ')' error ';'
+
+    ')'  shift, and go to state 268
+
+
+State 258
+
+   65 case_list: case_list "case" expr ':' • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 269
+
+
+State 259
+
+   67 default_opt: "default" ':' block •
+
+    $default  reduce using rule 67 (default_opt)
+
+
+State 260
+
+   61 switch_error: error ';' •
+
+    $default  reduce using rule 61 (switch_error)
+
+
+State 261
+
+   60 switch_error: error block •
+
+    $default  reduce using rule 60 (switch_error)
+
+
+State 262
+
+   62 switch_error: switch_error "case" • expr ':' block
+
+    "sum"              shift, and go to state 27
+    "prod"             shift, and go to state 28
+    "max"              shift, and go to state 29
+    "min"              shift, and go to state 30
+    "len"              shift, and go to state 31
+    "integer literal"  shift, and go to state 32
+    "float literal"    shift, and go to state 33
+    "string literal"   shift, and go to state 34
+    "boolean literal"  shift, and go to state 35
+    "identifier"       shift, and go to state 36
+    '('                shift, and go to state 38
+    '-'                shift, and go to state 39
+    '!'                shift, and go to state 40
+    '['                shift, and go to state 41
+
+    expr       go to state 270
+    or_expr    go to state 59
+    and_expr   go to state 60
+    eq_expr    go to state 61
+    rel_expr   go to state 62
+    add_expr   go to state 63
+    mul_expr   go to state 64
+    unary      go to state 65
+    postfix    go to state 66
+    primary    go to state 67
+    reduction  go to state 68
+
+
+State 263
+
+   63 switch_error: switch_error "default" • ':' block
+
+    ':'  shift, and go to state 271
+
+
+State 264
+
+   59 switch_stmt: "switch" condition '{' case_list default_opt switch_error '}' •
+
+    $default  reduce using rule 59 (switch_stmt)
+
+
+State 265
+
+   78 try_stmt: "try" block "catch" '(' "identifier" ')' block •
+
+    $default  reduce using rule 78 (try_stmt)
+
+
+State 266
+
+   81 assert_stmt: "assert" '(' expr ',' expr ')' ';' •
+
+    $default  reduce using rule 81 (assert_stmt)
+
+
+State 267
+
+   77 param: type "identifier" '=' expr •
+
+    $default  reduce using rule 77 (param)
+
+
+State 268
+
+   47 for_stmt: "for" '(' for_init ';' expr_opt ';' for_step ')' • block
+   50         | "for" '(' for_init ';' expr_opt ';' for_step ')' • error ';'
+
+    error  shift, and go to state 272
+    '{'    shift, and go to state 37
+
+    block  go to state 273
+
+
+State 269
+
+   65 case_list: case_list "case" expr ':' block •
+
+    $default  reduce using rule 65 (case_list)
+
+
+State 270
+
+   62 switch_error: switch_error "case" expr • ':' block
+
+    ':'  shift, and go to state 274
+
+
+State 271
+
+   63 switch_error: switch_error "default" ':' • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 275
+
+
+State 272
+
+   50 for_stmt: "for" '(' for_init ';' expr_opt ';' for_step ')' error • ';'
+
+    ';'  shift, and go to state 276
+
+
+State 273
+
+   47 for_stmt: "for" '(' for_init ';' expr_opt ';' for_step ')' block •
+
+    $default  reduce using rule 47 (for_stmt)
+
+
+State 274
+
+   62 switch_error: switch_error "case" expr ':' • block
+
+    '{'  shift, and go to state 37
+
+    block  go to state 277
+
+
+State 275
+
+   63 switch_error: switch_error "default" ':' block •
+
+    $default  reduce using rule 63 (switch_error)
+
+
+State 276
+
+   50 for_stmt: "for" '(' for_init ';' expr_opt ';' for_step ')' error ';' •
+
+    $default  reduce using rule 50 (for_stmt)
+
+
+State 277
+
+   62 switch_error: switch_error "case" expr ':' block •
+
+    $default  reduce using rule 62 (switch_error)

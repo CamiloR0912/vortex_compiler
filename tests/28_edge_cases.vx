@@ -1,0 +1,101 @@
+// Casos límite del código generado: saltos que atraviesan bloques try,
+// ámbitos, funciones anidadas y valores por copia.
+
+// ---- break y continue desde dentro de un try (deben cerrar el try) ----
+int reached = 0;
+for (int i = 0; i < 10; i = i + 1) {
+    try {
+        if (i == 1) { continue; }
+        if (i == 4) { break; }
+        reached = reached + 1;
+    } catch (e) {
+        print("never");
+    }
+}
+print("reached =", reached);                // 3: i = 0, 2, 3
+
+// Si el break dejara un try abierto, este error lo atraparía el try viejo
+try {
+    print(1 / (reached - 3));
+} catch (e) {
+    print("caught by the right handler:", e);
+}
+
+// ---- return desde dos try anidados dentro de un ciclo ----
+func int find(vector<int> xs, int wanted) {
+    for (int i = 0; i < len(xs); i = i + 1) {
+        try {
+            try {
+                if (xs[i] == wanted) { return i; }
+            } catch (inner) {
+                print("never");
+            }
+        } catch (outer) {
+            print("never");
+        }
+    }
+    return -1;
+}
+print("find =", find([5, 6, 7], 7), find([5, 6, 7], 9));
+
+// Muchas llamadas que salen por return dentro de try: la pila de try no crece
+int total = 0;
+for (int i = 0; i < 5000; i = i + 1) { total = total + find([1, 2, 3], 3); }
+print("total =", total);
+
+// ---- Una excepción cruza varias funciones y restaura la profundidad ----
+func int deep(int n) {
+    if (n == 0) { throw "bottom reached"; }
+    return deep(n - 1) + 1;
+}
+for (int round = 0; round < 3; round = round + 1) {
+    try { print(deep(900)); } catch (e) { print("round", round, e); }
+}
+
+// ---- Tres niveles de funciones anidadas que comparten una variable ----
+func int counter() {
+    int count = 0;
+    func void add(int amount) {
+        func void twice() { count = count + amount * 2; }
+        twice();
+    }
+    add(1);
+    add(10);
+    return count;
+}
+print("counter =", counter());              // 22
+
+// ---- Shadowing: variable, parámetro, bloque y variable del for ----
+int v = 1;
+func int shadow(int v) {
+    { int v = v + 100; print("  block v =", v); }
+    for (int v = 0; v < 1; v = v + 1) { print("  loop v =", v); }
+    return v;
+}
+print("param v =", shadow(5), "| global v =", v);
+
+// ---- Función local con el mismo nombre que una global ----
+func string where() { return "global"; }
+func string ask() {
+    func string where() { return "local"; }
+    return where();
+}
+print(where(), ask());
+
+// ---- Los arreglos se copian al asignar, al pasar y al retornar ----
+func vector<int> same(vector<int> xs) { return xs; }
+vector<int> original = [1, 2, 3];
+vector<int> returned = same(original);
+returned[0] = 99;
+matrix<int> grid = [[1, 2], [3, 4]];
+vector<int> row = grid[0];
+row[0] = 77;
+print(original, returned, grid, row);
+
+// ---- Precedencia, asociatividad y comparación de cadenas ----
+print(2 + 3 * 4 - 10 / 2 % 3, 100 - 10 - 1, 2 * -3, !(1 < 2) || 3 >= 3);
+print("apple" < "banana", "a" + 1 + 2, 1 + 2 + "a", "x" == "x", "x" != "y");
+print(7 / 2, -7 / 2, 7 % 3, 7.0 / 2, 1 / 3.0, 0.1 + 0.2);
+
+// ---- Cadenas con escapes y números con ceros a la izquierda ----
+print("tab:\there", "quote: \"q\"", 007 + 1);

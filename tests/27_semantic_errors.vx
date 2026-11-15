@@ -1,0 +1,40 @@
+// Errores semánticos: el compilador los reporta todos y NO genera el ejecutable.
+// Cada línea marcada debe producir un [Semantic error] con su número de línea.
+int x = 1;
+int x = 2;                              // x ya existe en este ámbito
+print(y);                               // variable sin declarar
+print(unknown(1));                      // función sin declarar
+string s = 5;                           // int no se puede guardar en string
+bool b = x + true;                      // int + bool no existe
+float f = "a" - 1;                      // string solo admite +
+int r = 7.5 % 2;                        // % solo entre enteros
+if (x && true) { print(x); }            // && requiere bool
+while (1) { x = x + 1; }                // la condición debe ser bool
+vector<int> v = [1, 2, 3];
+print(v[1.5]);                          // el índice debe ser int
+print(x[0]);                            // un int no se puede indexar
+v[0] = "zero";                          // el elemento es int
+print(sum("abc"));                      // sum requiere un arreglo numérico
+vector<string> names = ["a", "b"];
+print(max(names));                      // max requiere números
+return 5;                               // return fuera de una función
+continue;                               // continue fuera de un ciclo
+
+func int twice(int n) { return n * 2; }
+func int twice(int m) { return m + m; } // misma lista de tipos: no es sobrecarga
+func void log(string msg) { return 1; } // una función void no devuelve valor
+func int bad() { return "text"; }       // el tipo de retorno no coincide
+func int empty_return() { return; }     // falta el valor
+print(twice(1, 2));                     // demasiados argumentos
+print(twice(k = 1));                    // no existe el parámetro k
+int n = log("hi");                      // void no es un valor
+
+switch (x) {
+    case "one": { print(1); }           // el case no coincide con el tipo del switch
+}
+assert(x, "must be bool");              // la condición debe ser bool
+assert(x > 0, 42);                      // el mensaje debe ser string
+{
+    int inner = 1;
+}
+print(inner);                           // inner ya no existe fuera de su bloque

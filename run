@@ -1,0 +1,3 @@
+bison -d -v parser.y
+flex lexer.l
+gcc -o vortexc main.c ast.c semantic.c codegen.c lex.yy.c parser.tab.c
