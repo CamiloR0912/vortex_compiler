@@ -1,0 +1,3 @@
+# Todo el proyecto se compila y prueba en Linux (WSL): siempre fin de línea LF.
+# Con CRLF, bash no ejecuta los scripts y las salidas no coinciden con los .out.
+* text=auto eol=lf
