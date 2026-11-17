@@ -1,0 +1,16 @@
+ok 1 variables: a
+ok 2 a + b * 3
+ok 3 (a + b) * 3
+ok 4 a / b
+ok 5 a % b
+ok 6 -7 / 2
+ok 7 -7 % 2
+ok 8 -a + 10
+ok 9 a - b
+ok 10 a > b
+ok 11 a < b
+ok 12 a == 7
+ok 13 5000000000 * 3
+ok 14 registros r8-r15
+ok 15 memoria con base rsp
+exit code: 0

@@ -176,3 +176,153 @@ void x_call(Asm *a, Label l) {
 void x_ret(Asm *a) {
     buf_byte(&a->code, 0xC3);
 }
+
+/* ==========================================================================
+ * Instrucciones con operandos registro o memoria
+ *
+ * Casi todas siguen el mismo esquema:  REX  opcode  ModR/M  [SIB] [disp32]
+ *
+ *   ModR/M = mod(2) reg(3) rm(3)
+ *     reg  un registro, o una extensión del opcode ("/digito" en el manual)
+ *     rm   el otro operando:
+ *            mod = 11  rm es un registro
+ *            mod = 10  rm es memoria: [registro base + desplazamiento de 32 bits]
+ *
+ * Para memoria se usa siempre el desplazamiento de 32 bits (mod = 10): es
+ * un byte más largo que la forma de 8 bits cuando el desplazamiento es
+ * pequeño, pero una sola forma simplifica el codificador.
+ * ========================================================================== */
+
+/* Prefijo REX = 0100WRXB. Se omite cuando valdría 0x40 y no hace falta. */
+static void rex(Asm *a, int w, int reg, int base) {
+    int byte = 0x40 | (w << 3) | ((reg >> 3) & 1) << 2 | ((base >> 3) & 1);
+    if (byte != 0x40) buf_byte(&a->code, byte);
+}
+
+/* ModR/M con los dos operandos en registros (mod = 11) */
+static void modrm_reg(Asm *a, int reg, int rm) {
+    buf_byte(&a->code, 0xC0 | (reg & 7) << 3 | (rm & 7));
+}
+
+/* ModR/M para [base + disp32] (mod = 10).
+ * Cuando la base es rsp o r12 (rm = 100), ese valor de rm no significa
+ * "registro base" sino "sigue un byte SIB"; el SIB 0x24 indica base = rsp
+ * (o r12) sin índice. */
+static void modrm_mem(Asm *a, int reg, Reg base, int32_t disp) {
+    buf_byte(&a->code, 0x80 | (reg & 7) << 3 | (base & 7));
+    if ((base & 7) == RSP) buf_byte(&a->code, 0x24);
+    buf_u32(&a->code, (uint32_t)disp);
+}
+
+/* Operación de 64 bits entre registros: REX.W op /r */
+static void op_rr(Asm *a, int opcode, int reg, int rm) {
+    rex(a, 1, reg, rm);
+    buf_byte(&a->code, opcode);
+    modrm_reg(a, reg, rm);
+}
+
+/* mov dst, src: REX.W 89 /r  (copia src en dst; reg = src, rm = dst) */
+void x_mov_rr(Asm *a, Reg dst, Reg src) { op_rr(a, 0x89, src, dst); }
+
+/* mov dst, [base + disp]: REX.W 8B /r  (lee 8 bytes de memoria) */
+void x_load(Asm *a, Reg dst, Reg base, int32_t disp) {
+    rex(a, 1, dst, base);
+    buf_byte(&a->code, 0x8B);
+    modrm_mem(a, dst, base, disp);
+}
+
+/* mov [base + disp], src: REX.W 89 /r  (escribe 8 bytes en memoria) */
+void x_store(Asm *a, Reg base, int32_t disp, Reg src) {
+    rex(a, 1, src, base);
+    buf_byte(&a->code, 0x89);
+    modrm_mem(a, src, base, disp);
+}
+
+/* push r: 50+r   pop r: 58+r
+ * Apilar resta 8 a rsp y escribe; desapilar lee y suma 8. Son la base del
+ * modelo de máquina de pila del generador de código. */
+void x_push(Asm *a, Reg r) {
+    if (r >= R8) buf_byte(&a->code, 0x41);
+    buf_byte(&a->code, 0x50 + (r & 7));
+}
+
+void x_pop(Asm *a, Reg r) {
+    if (r >= R8) buf_byte(&a->code, 0x41);
+    buf_byte(&a->code, 0x58 + (r & 7));
+}
+
+/* Aritmética entre registros; el resultado queda en dst.
+ *   add dst, src   REX.W 01 /r
+ *   sub dst, src   REX.W 29 /r
+ *   imul dst, src  REX.W 0F AF /r   (aquí reg = dst y rm = src)
+ *   cmp a, b       REX.W 39 /r      (calcula a - b solo para las banderas)
+ *   test a, b      REX.W 85 /r      (calcula a AND b solo para las banderas) */
+void x_add_rr(Asm *a, Reg dst, Reg src) { op_rr(a, 0x01, src, dst); }
+void x_sub_rr(Asm *a, Reg dst, Reg src) { op_rr(a, 0x29, src, dst); }
+void x_cmp_rr(Asm *a, Reg x, Reg y)     { op_rr(a, 0x39, y, x); }
+void x_test_rr(Asm *a, Reg x, Reg y)    { op_rr(a, 0x85, y, x); }
+
+void x_imul_rr(Asm *a, Reg dst, Reg src) {
+    rex(a, 1, dst, src);
+    buf_byte(&a->code, 0x0F);
+    buf_byte(&a->code, 0xAF);
+    modrm_reg(a, dst, src);
+}
+
+/* add r, imm32: REX.W 81 /0 id     sub r, imm32: REX.W 81 /5 id
+ * El inmediato de 32 bits se extiende con signo a 64. Se usan para reservar
+ * y liberar espacio en la pila (sub rsp, N). */
+void x_add_ri(Asm *a, Reg r, int32_t imm) {
+    rex(a, 1, 0, r);
+    buf_byte(&a->code, 0x81);
+    modrm_reg(a, 0, r);
+    buf_u32(&a->code, (uint32_t)imm);
+}
+
+void x_sub_ri(Asm *a, Reg r, int32_t imm) {
+    rex(a, 1, 0, r);
+    buf_byte(&a->code, 0x81);
+    modrm_reg(a, 5, r);
+    buf_u32(&a->code, (uint32_t)imm);
+}
+
+/* neg r: REX.W F7 /3  (r = -r) */
+void x_neg(Asm *a, Reg r) {
+    rex(a, 1, 0, r);
+    buf_byte(&a->code, 0xF7);
+    modrm_reg(a, 3, r);
+}
+
+/* División entera con signo.
+ *   cqo        REX.W 99   extiende el signo de rax a rdx: el dividendo
+ *                         de 128 bits es rdx:rax
+ *   idiv r     REX.W F7 /7  rax = rdx:rax / r (truncando hacia cero),
+ *                           rdx = resto, con el signo del dividendo
+ * Si r vale 0 el procesador genera una excepción; el generador de código
+ * debe comprobar el divisor antes. */
+void x_cqo(Asm *a) {
+    buf_byte(&a->code, 0x48);
+    buf_byte(&a->code, 0x99);
+}
+
+void x_idiv(Asm *a, Reg r) {
+    rex(a, 1, 0, r);
+    buf_byte(&a->code, 0xF7);
+    modrm_reg(a, 7, r);
+}
+
+/* set<cc> al: 0F 90+cc /0  pone al = 1 si se cumple la condición, si no 0.
+ * movzx rax, al: REX.W 0F B6 /r  copia al en rax rellenando con ceros.
+ * Juntas convierten el resultado de una comparación en el valor 0 o 1. */
+void x_setcc_al(Asm *a, Cond cc) {
+    buf_byte(&a->code, 0x0F);
+    buf_byte(&a->code, 0x90 + cc);
+    modrm_reg(a, 0, RAX);
+}
+
+void x_movzx_rax_al(Asm *a) {
+    buf_byte(&a->code, 0x48);
+    buf_byte(&a->code, 0x0F);
+    buf_byte(&a->code, 0xB6);
+    modrm_reg(a, RAX, RAX);
+}

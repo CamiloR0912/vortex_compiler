@@ -95,6 +95,24 @@ void x_jcc(Asm *a, Cond cc, Label l);           /* j<cc> l        */
 void x_call(Asm *a, Label l);                   /* call l         */
 void x_ret(Asm *a);                             /* ret            */
 
+void x_mov_rr(Asm *a, Reg dst, Reg src);                /* mov dst, src           */
+void x_load(Asm *a, Reg dst, Reg base, int32_t disp);   /* mov dst, [base+disp]   */
+void x_store(Asm *a, Reg base, int32_t disp, Reg src);  /* mov [base+disp], src   */
+void x_push(Asm *a, Reg r);                             /* push r                 */
+void x_pop(Asm *a, Reg r);                              /* pop r                  */
+void x_add_rr(Asm *a, Reg dst, Reg src);                /* add dst, src           */
+void x_sub_rr(Asm *a, Reg dst, Reg src);                /* sub dst, src           */
+void x_imul_rr(Asm *a, Reg dst, Reg src);               /* imul dst, src          */
+void x_cmp_rr(Asm *a, Reg x, Reg y);                    /* cmp x, y               */
+void x_test_rr(Asm *a, Reg x, Reg y);                   /* test x, y              */
+void x_add_ri(Asm *a, Reg r, int32_t imm);              /* add r, imm             */
+void x_sub_ri(Asm *a, Reg r, int32_t imm);              /* sub r, imm             */
+void x_neg(Asm *a, Reg r);                              /* neg r                  */
+void x_cqo(Asm *a);                                     /* cqo                    */
+void x_idiv(Asm *a, Reg r);                             /* idiv r                 */
+void x_setcc_al(Asm *a, Cond cc);                       /* set<cc> al             */
+void x_movzx_rax_al(Asm *a);                            /* movzx rax, al          */
+
 /* ---- elf.c ----
  * Escribe el ejecutable; entry es la posición de la primera instrucción
  * dentro del código. Devuelve 0 si todo salió bien. */
