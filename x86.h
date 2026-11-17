@@ -110,6 +110,9 @@ void x_sub_ri(Asm *a, Reg r, int32_t imm);              /* sub r, imm           
 void x_neg(Asm *a, Reg r);                              /* neg r                  */
 void x_cqo(Asm *a);                                     /* cqo                    */
 void x_idiv(Asm *a, Reg r);                             /* idiv r                 */
+void x_div(Asm *a, Reg r);                              /* div r (sin signo)      */
+void x_store8(Asm *a, Reg base, int32_t disp, Reg src); /* mov byte [base+disp], src8 */
+void x_rep_movsb(Asm *a);                               /* rep movsb              */
 void x_setcc_al(Asm *a, Cond cc);                       /* set<cc> al             */
 void x_movzx_rax_al(Asm *a);                            /* movzx rax, al          */
 

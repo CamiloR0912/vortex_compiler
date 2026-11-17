@@ -311,6 +311,36 @@ void x_idiv(Asm *a, Reg r) {
     modrm_reg(a, 7, r);
 }
 
+/* div r: REX.W F7 /6  división SIN signo: rax = rdx:rax / r, rdx = resto.
+ * La usa la conversión de enteros a texto: después de negar un número
+ * negativo, el resultado se interpreta sin signo. Así funciona incluso
+ * con el entero más negativo, -9223372036854775808, cuyo negado no cabe
+ * en un entero con signo de 64 bits pero sí en uno sin signo. */
+void x_div(Asm *a, Reg r) {
+    rex(a, 1, 0, r);
+    buf_byte(&a->code, 0xF7);
+    modrm_reg(a, 6, r);
+}
+
+/* mov byte [base + disp], src8: [REX] 88 /r  (escribe solo el byte bajo de src)
+ * Para los registros 4 a 7 hace falta un prefijo REX aunque valga 0x40:
+ * sin él, esos números significan ah, ch, dh y bh en lugar de spl, bpl,
+ * sil y dil. */
+void x_store8(Asm *a, Reg base, int32_t disp, Reg src) {
+    int byte = 0x40 | ((src >> 3) & 1) << 2 | ((base >> 3) & 1);
+    if (byte != 0x40 || (src >= RSP && src <= RDI)) buf_byte(&a->code, byte);
+    buf_byte(&a->code, 0x88);
+    modrm_mem(a, src, base, disp);
+}
+
+/* rep movsb: F3 A4
+ * Copia rcx bytes desde la dirección rsi a la dirección rdi; al terminar,
+ * rsi y rdi quedan después del bloque copiado y rcx en 0. */
+void x_rep_movsb(Asm *a) {
+    buf_byte(&a->code, 0xF3);
+    buf_byte(&a->code, 0xA4);
+}
+
 /* set<cc> al: 0F 90+cc /0  pone al = 1 si se cumple la condición, si no 0.
  * movzx rax, al: REX.W 0F B6 /r  copia al en rax rellenando con ceros.
  * Juntas convierten el resultado de una comparación en el valor 0 o 1. */

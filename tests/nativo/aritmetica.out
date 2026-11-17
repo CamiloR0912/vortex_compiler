@@ -13,4 +13,7 @@ ok 12 a == 7
 ok 13 5000000000 * 3
 ok 14 registros r8-r15
 ok 15 memoria con base rsp
+ok 16 div sin signo: 2^63 / 10
+ok 17 byte desde dil
+ok 18 rep movsb
 exit code: 0

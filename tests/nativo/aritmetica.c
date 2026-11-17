@@ -144,6 +144,31 @@ int main(int argc, char **argv) {
     x_mov_rr(&a, RAX, RCX);
     check("memoria con base rsp", 99);
 
+    /* div sin signo: 0x8000000000000000 (= 2^63 sin signo) / 10 */
+    x_mov_ri(&a, RAX, 0x8000000000000000ULL);
+    x_mov_ri(&a, RDX, 0);
+    x_mov_ri(&a, RCX, 10);
+    x_div(&a, RCX);
+    check("div sin signo: 2^63 / 10", 922337203685477580LL);
+
+    /* Escritura de un byte desde dil (registro 7: necesita REX 0x40) */
+    constant(0);
+    x_store(&a, RBP, VAR_B, RAX);
+    x_mov_ri(&a, RDI, 0x141);               /* el byte bajo es 0x41 */
+    x_store8(&a, RBP, VAR_B, RDI);
+    x_load(&a, RAX, RBP, VAR_B);
+    check("byte desde dil", 0x41);
+
+    /* rep movsb: copia los 8 bytes de a sobre b */
+    x_mov_rr(&a, RSI, RBP);
+    x_sub_ri(&a, RSI, -VAR_A);              /* rsi = &a */
+    x_mov_rr(&a, RDI, RBP);
+    x_sub_ri(&a, RDI, -VAR_B);              /* rdi = &b */
+    x_mov_ri(&a, RCX, 8);
+    x_rep_movsb(&a);
+    x_load(&a, RAX, RBP, VAR_B);
+    check("rep movsb", 7);
+
     /* Salida: deshacer el marco y exit(0) */
     x_mov_rr(&a, RSP, RBP);
     x_pop(&a, RBP);
