@@ -8,7 +8,7 @@ tmp=$(mktemp -d)
 pass=0; fail=0
 for gen in tests/nativo/*.c; do
     name=$(basename "$gen" .c)
-    if ! gcc -Wall -Wextra -o "$tmp/$name.gen" "$gen" x86enc.c elf.c; then
+    if ! gcc -Wall -Wextra -o "$tmp/$name.gen" "$gen" x86enc.c elf.c runtime.c; then
         echo "FAIL  $gen (no compila)"; fail=$((fail + 1)); continue
     fi
     "$tmp/$name.gen" "$tmp/$name"
