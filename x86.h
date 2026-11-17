@@ -40,13 +40,42 @@ typedef enum {
     R8, R9, R10, R11, R12, R13, R14, R15
 } Reg;
 
+/* ---- Etiquetas ----
+ * Una etiqueta nombra una posición del código. Puede usarse en un salto
+ * antes de saber dónde queda (salto hacia adelante): el salto se emite con
+ * un desplazamiento provisional y se anota como pendiente. asm_finish
+ * calcula todos los desplazamientos cuando ya se conocen las posiciones
+ * (relleno posterior o backpatching). */
+typedef int Label;
+
+typedef struct {
+    int at;         /* posición en el código del campo rel32 a completar */
+    Label target;
+} Fixup;
+
 /* ---- El programa que se está ensamblando ---- */
 typedef struct {
     Buf code;
     Buf data;
+    int *labels;            /* posición de cada etiqueta; -1 si aún no se fijó */
+    int nlabels, cap_labels;
+    Fixup *fixups;          /* saltos pendientes de completar */
+    int nfixups, cap_fixups;
 } Asm;
 
 void asm_init(Asm *a);
+
+Label asm_label(Asm *a);            /* crea una etiqueta todavía sin posición */
+void asm_bind(Asm *a, Label l);     /* la fija en la posición actual del código */
+void asm_finish(Asm *a);            /* completa los saltos; error si falta una etiqueta */
+
+/* Condiciones de los saltos condicionales: el valor es el que se suma
+ * al opcode 0F 80 (manual de Intel, instrucción Jcc). */
+typedef enum {
+    CC_E = 0x4,  CC_NE = 0x5,   /* igual / distinto (ZF)            */
+    CC_L = 0xC,  CC_GE = 0xD,   /* menor / mayor o igual, con signo */
+    CC_LE = 0xE, CC_G = 0xF     /* menor o igual / mayor, con signo */
+} Cond;
 
 /* Agrega bytes al final de un buffer */
 void buf_byte(Buf *b, int byte);
@@ -60,6 +89,11 @@ uint64_t asm_data(Asm *a, const void *src, int len);
 /* ---- Instrucciones ---- */
 void x_mov_ri(Asm *a, Reg dst, uint64_t imm);   /* mov dst, imm   */
 void x_syscall(Asm *a);                         /* syscall        */
+void x_dec(Asm *a, Reg r);                      /* dec r          */
+void x_jmp(Asm *a, Label l);                    /* jmp l          */
+void x_jcc(Asm *a, Cond cc, Label l);           /* j<cc> l        */
+void x_call(Asm *a, Label l);                   /* call l         */
+void x_ret(Asm *a);                             /* ret            */
 
 /* ---- elf.c ----
  * Escribe el ejecutable; entry es la posición de la primera instrucción

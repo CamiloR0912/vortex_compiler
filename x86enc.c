@@ -9,7 +9,7 @@
  *            cuarto bit de los registros de los campos reg, index y base,
  *            necesarios para nombrar r8..r15.
  *   opcode   uno o más bytes que identifican la operación.
- *   ModR/M   modo de direccionamiento y registros (se usa desde la etapa 2).
+ *   ModR/M   modo de direccionamiento y registros de los operandos.
  *   inmediato valor constante incluido en la instrucción, little endian.
  * ========================================================================== */
 #include <stdio.h>
@@ -52,6 +52,54 @@ void asm_init(Asm *a) {
     memset(a, 0, sizeof *a);
 }
 
+/* ---- Etiquetas y relleno posterior ---- */
+
+Label asm_label(Asm *a) {
+    if (a->nlabels == a->cap_labels) {
+        a->cap_labels = a->cap_labels ? a->cap_labels * 2 : 64;
+        a->labels = realloc(a->labels, a->cap_labels * sizeof *a->labels);
+    }
+    a->labels[a->nlabels] = -1;
+    return a->nlabels++;
+}
+
+void asm_bind(Asm *a, Label l) {
+    a->labels[l] = a->code.len;
+}
+
+/* Emite un campo rel32 provisional (cero) y lo anota como pendiente */
+static void rel32_to(Asm *a, Label l) {
+    if (a->nfixups == a->cap_fixups) {
+        a->cap_fixups = a->cap_fixups ? a->cap_fixups * 2 : 64;
+        a->fixups = realloc(a->fixups, a->cap_fixups * sizeof *a->fixups);
+    }
+    a->fixups[a->nfixups].at = a->code.len;
+    a->fixups[a->nfixups].target = l;
+    a->nfixups++;
+    buf_u32(&a->code, 0);
+}
+
+/* Los saltos de x86 son relativos: el desplazamiento se mide desde el
+ * final de la instrucción, que es justo donde termina el campo rel32.
+ *     rel32 = destino - (posición del campo + 4)
+ * Un valor negativo salta hacia atrás. */
+void asm_finish(Asm *a) {
+    int i;
+    for (i = 0; i < a->nfixups; i++) {
+        Fixup *f = &a->fixups[i];
+        int target = a->labels[f->target];
+        int32_t rel;
+        int k;
+        if (target < 0) {
+            fprintf(stderr, "vortexc: internal error: label %d never bound\n", f->target);
+            exit(1);
+        }
+        rel = target - (f->at + 4);
+        for (k = 0; k < 4; k++) a->code.bytes[f->at + k] = ((uint32_t)rel >> (8 * k)) & 0xFF;
+    }
+    a->nfixups = 0;
+}
+
 uint64_t asm_data(Asm *a, const void *src, int len) {
     uint64_t addr = DATA_BASE + a->data.len;
     buf_bytes(&a->data, src, len);
@@ -89,4 +137,42 @@ void x_mov_ri(Asm *a, Reg dst, uint64_t imm) {
 void x_syscall(Asm *a) {
     buf_byte(&a->code, 0x0F);
     buf_byte(&a->code, 0x05);
+}
+
+/* dec r: REX.W [+B] FF /1
+ * "/1" significa que el campo reg del byte ModR/M no nombra un registro
+ * sino que completa el opcode (FF con reg=1 es dec). El byte ModR/M es
+ *     mod(2 bits) reg(3 bits) rm(3 bits)
+ * mod=11 indica que el operando rm es un registro, no memoria. */
+void x_dec(Asm *a, Reg r) {
+    buf_byte(&a->code, 0x48 | (r >= R8 ? 1 : 0));
+    buf_byte(&a->code, 0xFF);
+    buf_byte(&a->code, 0xC0 | (1 << 3) | (r & 7));
+}
+
+/* jmp rel32: E9 rel32 */
+void x_jmp(Asm *a, Label l) {
+    buf_byte(&a->code, 0xE9);
+    rel32_to(a, l);
+}
+
+/* j<cc> rel32: 0F 80+cc rel32
+ * Salta si se cumple la condición sobre las banderas que dejó la última
+ * operación aritmética o comparación. */
+void x_jcc(Asm *a, Cond cc, Label l) {
+    buf_byte(&a->code, 0x0F);
+    buf_byte(&a->code, 0x80 + cc);
+    rel32_to(a, l);
+}
+
+/* call rel32: E8 rel32
+ * Apila la dirección de la instrucción siguiente y salta. */
+void x_call(Asm *a, Label l) {
+    buf_byte(&a->code, 0xE8);
+    rel32_to(a, l);
+}
+
+/* ret: C3. Desapila la dirección de retorno y salta a ella. */
+void x_ret(Asm *a) {
+    buf_byte(&a->code, 0xC3);
 }
