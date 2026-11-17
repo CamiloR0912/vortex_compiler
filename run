@@ -1,6 +1,13 @@
 #!/bin/bash
-# Etapa 1: genera los ejecutables de prueba sin gcc, los ejecuta y compara
-# su salida con la esperada.
+# Construye vortexc y corre todas las pruebas.
 #   bash run
 cd "$(dirname "$0")" || exit 1
+set -e
+bison -d -v parser.y
+flex lexer.l
+gcc -o vortexc main.c ast.c semantic.c lex.yy.c parser.tab.c
+set +e
+echo "== Backend nativo (tests/nativo) =="
 bash tests/nativo/run.sh
+echo "== Programas Vortex (tests) =="
+bash tests/run_tests.sh

@@ -9,7 +9,7 @@ El compilador se reconstruye por etapas: cada rama contiene solo lo que existe h
 | Etapa | Rama | Alcance | Estado |
 |---|---|---|---|
 | 1 | `etapa-1/ejecutable-minimo` | Codificador de instrucciones y escritor ELF | Terminada |
-| 2 | `etapa-2/enteros-y-print` | Enteros, booleanos, variables, aritmética y `print` | Pendiente |
+| 2 | `etapa-2/enteros-y-print` | Enteros, booleanos, variables, aritmética y `print` | En curso |
 | 3 | `etapa-3/control-de-flujo` | `if`, `while`, `for`, `switch`, bloques y shadowing | Pendiente |
 | 4 | `etapa-4/funciones` | Funciones, recursión, sobrecarga y funciones anidadas | Pendiente |
 | 5 | `etapa-5/cadenas-y-reales` | `string` y `float` | Pendiente |

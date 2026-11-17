@@ -1,0 +1,6 @@
+# Archivos que genera el script run: se reconstruyen en cada compilación
+lex.yy.c
+parser.tab.c
+parser.tab.h
+parser.output
+vortexc
