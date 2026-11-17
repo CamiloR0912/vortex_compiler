@@ -8,15 +8,20 @@
  *   code   instrucciones del programa         (segmento de lectura y ejecución)
  *   data   literales: cadenas, mensajes, ...   (segmento de lectura y escritura)
  *
+ * Además se reservan bytes "sin inicializar" (bss): memoria de lectura y
+ * escritura que empieza en cero y no ocupa espacio en el archivo, como el
+ * buffer de salida. Solo se guarda su tamaño.
+ *
  * Direcciones fijas en memoria (el ejecutable no es reubicable):
  *
  *   CODE_BASE  0x400000     donde el sistema carga el archivo; el código
  *                           empieza justo después de las cabeceras ELF
  *   DATA_BASE  0x10000000   donde se carga el segmento de datos
+ *   BSS_BASE   0x20000000   donde empieza la memoria sin inicializar
  *
- * Como DATA_BASE no depende del tamaño del código, la dirección de un dato
- * se conoce en el momento de crearlo y puede escribirse directamente en una
- * instrucción.
+ * Como estas bases no dependen del tamaño del código ni de los datos, la
+ * dirección de un dato se conoce en el momento de crearlo y puede
+ * escribirse directamente en una instrucción.
  * ========================================================================== */
 #ifndef X86_H
 #define X86_H
@@ -25,6 +30,7 @@
 
 #define CODE_BASE  0x400000ULL
 #define DATA_BASE  0x10000000ULL
+#define BSS_BASE   0x20000000ULL
 
 /* ---- Buffer de bytes que crece según se necesite ---- */
 typedef struct {
@@ -57,6 +63,7 @@ typedef struct {
 typedef struct {
     Buf code;
     Buf data;
+    int bss_len;            /* bytes reservados a partir de BSS_BASE */
     int *labels;            /* posición de cada etiqueta; -1 si aún no se fijó */
     int nlabels, cap_labels;
     Fixup *fixups;          /* saltos pendientes de completar */
@@ -85,6 +92,9 @@ void buf_bytes(Buf *b, const void *src, int len);
 
 /* Copia len bytes al segmento de datos y devuelve su dirección en memoria */
 uint64_t asm_data(Asm *a, const void *src, int len);
+
+/* Reserva len bytes en cero (alineados a 8) y devuelve su dirección */
+uint64_t asm_bss(Asm *a, int len);
 
 /* ---- Instrucciones ---- */
 void x_mov_ri(Asm *a, Reg dst, uint64_t imm);   /* mov dst, imm   */

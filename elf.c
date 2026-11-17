@@ -14,8 +14,8 @@
  * Distribución del archivo que escribe vortexc:
  *
  *   desplazamiento 0      cabecera ELF
- *                  64     2 cabeceras de programa
- *                  176    código                     <- punto de entrada
+ *                  64     3 cabeceras de programa
+ *                  232    código                     <- punto de entrada
  *                  ...    relleno hasta múltiplo de 4096
  *                  N      datos
  *
@@ -23,6 +23,9 @@
  *              cargado en CODE_BASE. Incluye las cabeceras, lo que es
  *              habitual y no estorba.
  *   Segmento 2 (lectura y escritura): los datos, cargados en DATA_BASE.
+ *   Segmento 3 (lectura y escritura): memoria sin inicializar en BSS_BASE.
+ *              Ocupa 0 bytes en el archivo (p_filesz = 0) y bss_len bytes
+ *              en memoria; el núcleo la entrega llena de ceros.
  *
  * El cargador exige que la dirección de un segmento y su desplazamiento en
  * el archivo coincidan módulo el tamaño de página (4096). Por eso los datos
@@ -38,7 +41,7 @@
 
 #define EHDR_SIZE  64
 #define PHDR_SIZE  56
-#define PHDR_COUNT 2
+#define PHDR_COUNT 3
 #define PAGE       4096
 
 /* Dirección en memoria del primer byte de código */
@@ -66,6 +69,7 @@ int elf_write(const char *path, const Asm *a, int entry) {
     uint64_t code_end = EHDR_SIZE + PHDR_COUNT * PHDR_SIZE + a->code.len;
     uint64_t data_off = (code_end + PAGE - 1) / PAGE * PAGE;
     uint64_t data_mem = a->data.len > 0 ? a->data.len : 1;   /* nunca un segmento vacío */
+    uint64_t bss_mem = a->bss_len > 0 ? a->bss_len : 1;
     static const unsigned char ident[16] = {
         0x7F, 'E', 'L', 'F',    /* número mágico */
         2,                      /* EI_CLASS = ELFCLASS64 */
@@ -94,6 +98,7 @@ int elf_write(const char *path, const Asm *a, int entry) {
     /* ---- 2. Cabeceras de programa ---- */
     program_header(&out, 4 | 1, 0, CODE_BASE, code_end, code_end);
     program_header(&out, 4 | 2, data_off, DATA_BASE, a->data.len, data_mem);
+    program_header(&out, 4 | 2, 0, BSS_BASE, 0, bss_mem);
 
     /* ---- 3. Segmentos ---- */
     buf_bytes(&out, a->code.bytes, a->code.len);

@@ -56,13 +56,15 @@ El desplazamiento se mide desde el final de la instrucción, que es donde termin
 
 ```
 desplazamiento 0      cabecera ELF (64 bytes)
-               64     2 cabeceras de programa (56 bytes cada una)
-               176    código               cargado en 0x4000B0: punto de entrada
+               64     3 cabeceras de programa (56 bytes cada una)
+               232    código               cargado en 0x4000E8: punto de entrada
                ...    relleno hasta 4096
                4096   datos                cargados en 0x10000000
 ```
 
-El segmento de código tiene permisos de lectura y ejecución y el de datos de lectura y escritura. Como el segmento de datos siempre empieza en `0x10000000`, la dirección de un dato se conoce en cuanto se crea y se escribe directamente en la instrucción que lo usa, sin un paso de reubicación.
+El segmento de código tiene permisos de lectura y ejecución y el de datos de lectura y escritura. El tercer segmento, agregado en la etapa 2, es memoria sin inicializar (bss) en `0x20000000`: no ocupa bytes en el archivo y el núcleo la entrega llena de ceros. Ahí van el buffer de salida y otras variables del entorno de ejecución.
+
+Como cada segmento empieza en una dirección fija, la dirección de un dato se conoce en cuanto se crea y se escribe directamente en la instrucción que lo usa, sin un paso de reubicación.
 
 ### Pruebas
 

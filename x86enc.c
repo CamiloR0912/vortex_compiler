@@ -106,6 +106,14 @@ uint64_t asm_data(Asm *a, const void *src, int len) {
     return addr;
 }
 
+uint64_t asm_bss(Asm *a, int len) {
+    uint64_t addr;
+    a->bss_len = (a->bss_len + 7) / 8 * 8;     /* alinear a 8 bytes */
+    addr = BSS_BASE + a->bss_len;
+    a->bss_len += len;
+    return addr;
+}
+
 /* ---- Instrucciones ---- */
 
 /* mov dst, imm
