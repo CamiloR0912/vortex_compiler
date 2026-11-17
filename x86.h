@@ -61,6 +61,11 @@ uint64_t asm_data(Asm *a, const void *src, int len);
 void x_mov_ri(Asm *a, Reg dst, uint64_t imm);   /* mov dst, imm   */
 void x_syscall(Asm *a);                         /* syscall        */
 
+/* ---- elf.c ----
+ * Escribe el ejecutable; entry es la posición de la primera instrucción
+ * dentro del código. Devuelve 0 si todo salió bien. */
+int elf_write(const char *path, const Asm *a, int entry);
+
 /* Números de las llamadas al sistema de Linux x86-64 que usa el compilador */
 #define SYS_WRITE  1
 #define SYS_EXIT   60
