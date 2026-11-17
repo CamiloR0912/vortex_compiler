@@ -1,3 +1,6 @@
-bison -d -v parser.y
-flex lexer.l
-gcc -o vortexc main.c ast.c semantic.c codegen.c lex.yy.c parser.tab.c
+#!/bin/bash
+# Etapa 1: genera los ejecutables de prueba sin gcc, los ejecuta y compara
+# su salida con la esperada.
+#   bash run
+cd "$(dirname "$0")" || exit 1
+bash tests/nativo/run.sh

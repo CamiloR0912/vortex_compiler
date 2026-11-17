@@ -2,7 +2,7 @@
 
 Este documento sigue la construcción del backend que reemplaza a GCC. El objetivo es que `vortexc` escriba por sí mismo un ejecutable ELF para Linux x86-64, sin compilador, ensamblador ni enlazador externos, y sin la biblioteca estándar de C en el programa generado.
 
-Mientras el backend nativo no cubra todo el lenguaje, `vortexc` sigue usando la traducción a C (`codegen.c` y GCC), y las 33 pruebas de `tests/` siguen siendo la referencia de la salida correcta.
+El compilador se reconstruye por etapas: cada rama contiene solo lo que existe hasta esa etapa, de modo que cada avance se puede compilar y probar por separado. La versión anterior, que traducía a C y usaba GCC, está en la rama `main`; de ella se recuperan el analizador léxico, el sintáctico y el semántico cuando una etapa los necesita, y sus 33 programas de prueba son la referencia de la salida correcta.
 
 ## Etapas
 
@@ -66,8 +66,10 @@ El segmento de código tiene permisos de lectura y ejecución y el de datos de l
 
 ### Pruebas
 
+Desde WSL, en la carpeta del proyecto:
+
 ```
-bash tests/nativo/run.sh
+bash run
 ```
 
 | Prueba | Qué demuestra | Salida esperada |

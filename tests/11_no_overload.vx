@@ -1,6 +1,0 @@
-// Ninguna versión de la función acepta un bool
-// Es un error semántico: el compilador lo detecta antes de generar código, así que nada se ejecuta.
-func string describe(int x)    { return "int"; }
-func string describe(string x) { return "string"; }
-print(describe(3));
-print(describe(true));

@@ -1,7 +1,0 @@
-// break fuera de un ciclo
-// Es un error semántico: el compilador lo detecta antes de generar código, así que nada se ejecuta.
-int x = 1;
-if (x == 1) {
-    print("before");
-    break;
-}

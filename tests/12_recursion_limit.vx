@@ -1,5 +1,0 @@
-// Recursión infinita: el programa compilado la detiene con un error en vez de agotar la pila
-func int forever(int n) {
-    return forever(n + 1);
-}
-print(forever(0));
