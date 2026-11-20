@@ -12,7 +12,7 @@ El compilador se reconstruye por etapas: cada rama contiene solo lo que existe h
 | 2 | `etapa-2/enteros-y-print` | Enteros, booleanos, variables, aritmética y `print` | Terminada |
 | 3 | `etapa-3/control-de-flujo` | `if`, `while`, `for`, `switch`, `break` y `continue` | Terminada |
 | 4 | `etapa-4/funciones` | Funciones, recursión, sobrecarga y funciones anidadas | Terminada |
-| 5 | `etapa-5/cadenas-y-reales` | `string` y `float` | Pendiente |
+| 5 | `etapa-5/cadenas-y-reales` | `string` y `float` | Terminada |
 | 6 | `etapa-6/excepciones` | `try`-`catch`, `throw`, `assert` y errores de ejecución | Pendiente |
 | 7 | `etapa-7/vectores-y-matrices` | Arreglos, operaciones elemento a elemento y reducciones | Pendiente |
 
@@ -295,3 +295,65 @@ En la versión anterior esto lo resolvía GCC con su extensión de funciones ani
 | `tests/13_missing_return.vx` | Recuperada de `main`: función `int` que termina sin `return` |
 
 `tests/09_functions.vx` de `main` usa `float` y cadenas; se recupera en la etapa 5.
+
+## Etapa 5: cadenas y números reales
+
+### Representación
+
+Todos los valores siguen viajando en `rax` como 64 bits, así que variables, argumentos, retornos y la pila de la máquina no cambian:
+
+| Tipo | Contenido de `rax` |
+|---|---|
+| `float` | Los 64 bits IEEE 754 del double. Para operar se pasan a `xmm0`/`xmm1` con `movq` |
+| `string` | La dirección de los bytes, terminados en 0. Los literales están en el segmento de datos; las cadenas creadas al ejecutar, en el heap |
+
+### Números reales
+
+| Construcción | Código generado |
+|---|---|
+| Literal | `vortexc` lo convierte con `strtod` y emite sus bits con `mov rax, imm64` |
+| Promoción `int` → `float` | `cvtsi2sd`, en operaciones mixtas, declaraciones, asignaciones, argumentos, `return` y `case` |
+| `+ - * /` | `addsd`, `subsd`, `mulsd`, `divsd`. Dividir entre `0.0` es error de ejecución, como antes |
+| Comparaciones | `ucomisd` y las condiciones sin signo (`seta`, `setae`); `==` y `!=` revisan además la bandera de paridad, que indica un NaN. Como en C, toda comparación con NaN es falsa salvo `!=` |
+| `-x` | `xor` con el bit de signo, que conserva `-0.0` |
+
+### Reales a texto
+
+La versión anterior imprimía con `snprintf("%.15g")` y agregaba `.0` si el texto no tenía `.`, `e` ni `n`. `fmt_float` (en `runtime.c`) reproduce ese formato en código máquina:
+
+1. Signo, `inf`, `nan` y cero se tratan aparte.
+2. El exponente decimal E (10^E ≤ x < 10^(E+1)) se estima con el exponente binario del double y se ajusta comparando con una tabla de potencias de 10 que `vortexc` calcula con `strtod` y guarda en el ejecutable.
+3. N = redondear(x · 10^(14−E)) da los 15 dígitos significativos.
+4. Notación normal si −4 ≤ E < 15 y científica si no; se quitan los ceros finales.
+
+El paso 3 tiene una dificultad: si x · 10^k se calcula como un solo double, el resultado ya está redondeado. Un valor exacto como …428.54 puede quedar en …428.5 y `cvtsd2si` redondea ese empate al par, …428, mientras que `printf` (que redondea el valor exacto) da …429. Para evitarlo, el producto se lleva como *double-double* (un par alto + bajo con unos 106 bits de precisión) y se aplica en pasos de a lo sumo 10^22, la mayor potencia de 10 exacta en un double. El error exacto de cada producto lo calcula el algoritmo TwoProduct de Dekker con sumas y multiplicaciones normales. En un empate decide el signo de la parte baja.
+
+La rutina se validó contra `printf` de glibc con 219 870 valores: potencias de 10 y sus vecinos, decimales comunes y 100 000 patrones de bits aleatorios (cualquier double finito). Hubo una sola diferencia, en un número subnormal (menor que 2.2 · 10^-308): `9.99999999999997e-311` frente a `1e-310`. En esa zona los productos parciales pierden precisión.
+
+### Cadenas
+
+| Construcción | Código generado |
+|---|---|
+| Literal | `vortexc` interpreta las secuencias de escape (`\n`, `\t`, `\"`, `\\`…), que antes interpretaba GCC, y guarda los bytes con un 0 final |
+| `a + b` con un `string` | Cada operando se convierte a cadena (`str_int`, `str_float`, `str_bool`) y `concat` reserva una cadena nueva |
+| `<`, `==`… | `strcmp` deja -1, 0 o 1 y ese valor se compara con 0 con el mismo operador |
+| `len(s)` | `strlen` |
+| `switch` | `strcmp` con cada `case` |
+| `print` | `print_str` |
+
+### Heap
+
+`alloc` reparte memoria de bloques de al menos 1 MB que pide al núcleo con la llamada al sistema `mmap` (sin la biblioteca de C). Como en la versión anterior, la memoria no se libera: el sistema la recupera al terminar el programa.
+
+### Pruebas
+
+| Prueba | Qué demuestra |
+|---|---|
+| `tests/nativo/aritmetica.c` | 12 comprobaciones de las instrucciones SSE, incluido el redondeo al par de `cvtsd2si` y la paridad de un NaN |
+| `tests/nativo/cadenas.c` | Concatenación con conversiones, `strcmp`, 1500 concatenaciones en varios bloques de `mmap` y un bloque de 3 MB |
+| `tests/nativo/reales.c` | Cada camino de `fmt_float`; su `.out` lo genera `reales_esperado.c` con `printf` |
+| `tests/32_native_floats.vx` | Aritmética y promoción, comparaciones con NaN, `inf`, `-nan`, `-0.0`, funciones `float`, Newton con función anidada, `switch` con `case` real y división real entre cero |
+| `tests/33_native_strings.vx` | Escapes, concatenación con cada tipo, orden lexicográfico, `len`, `switch`, cadenas en funciones y 2000 concatenaciones |
+| `tests/01_basics`, `04_runtime_error`, `06_control_flow`, `09_functions` | Recuperadas de `main` |
+
+La gramática de Vortex no tiene literales con exponente (`1e308` se lee como `1` seguido del identificador `e308`); `32_native_floats.vx` llega a `inf` multiplicando.

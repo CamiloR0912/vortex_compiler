@@ -28,11 +28,12 @@
  *   anidada llega a las variables de las funciones que la contienen
  *   siguiendo la cadena de enlaces estáticos.
  *
- * Alcance hasta la etapa 4: int, bool, variables, asignación, bloques,
- * aritmética, comparaciones, operadores lógicos, print, if/else, while,
- * for, break, continue, switch y funciones (recursión, sobrecarga,
- * parámetros nombrados y por defecto, funciones anidadas). Si el programa
- * usa algo más, se reporta como no soportado y no se genera el ejecutable.
+ * Alcance hasta la etapa 5: int, bool, float, string, variables,
+ * asignación, bloques, aritmética, comparaciones, operadores lógicos,
+ * concatenación, len de cadenas, print, if/else, while, for, break,
+ * continue, switch y funciones (recursión, sobrecarga, parámetros
+ * nombrados y por defecto, funciones anidadas). Si el programa usa algo
+ * más, se reporta como no soportado y no se genera el ejecutable.
  * ========================================================================== */
 #include <stdlib.h>
 #include <string.h>
