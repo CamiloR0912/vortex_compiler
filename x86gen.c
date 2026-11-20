@@ -248,20 +248,42 @@ static void gen_if(Node *n) {
     asm_bind(&a, fin);
 }
 
+/* Ciclos abiertos, del más externo al más interno. break salta al final
+ * del ciclo más interno y continue a su punto de continuación. */
+typedef struct {
+    Label brk;          /* destino de break: después del ciclo          */
+    Label cont;         /* destino de continue: la condición o el paso  */
+} Loop;
+
+static Loop loops[256];
+static int loop_count = 0;
+
+static void loop_open(Label brk, Label cont) {
+    loops[loop_count].brk = brk;
+    loops[loop_count].cont = cont;
+    loop_count++;
+}
+
+static void loop_close(void) {
+    loop_count--;
+}
+
 /* while (condición) { cuerpo }
- * inicio:   <condición>
+ * inicio:   <condición>           ; continue salta aquí
  *           test rax, rax
  *           je fin
  *           <cuerpo>
  *           jmp inicio
- * fin: */
+ * fin:                            ; break salta aquí */
 static void gen_while(Node *n) {
     Label inicio = asm_label(&a), fin = asm_label(&a);
     asm_bind(&a, inicio);
     gen_expr(n->a);
     x_test_rr(&a, RAX, RAX);
     x_jcc(&a, CC_E, fin);
+    loop_open(fin, inicio);
     gen_stmt(n->b);
+    loop_close();
     x_jmp(&a, inicio);
     asm_bind(&a, fin);
 }
@@ -272,13 +294,15 @@ static void gen_while(Node *n) {
  *           test rax, rax
  *           je fin
  *           <cuerpo>
- *           <paso>                ; opcional
+ * paso:     <paso>                ; opcional; continue salta aquí
  *           jmp ciclo
- * fin:
+ * fin:                            ; break salta aquí
+ * continue va al paso y no a la condición: si saltara a la condición, la
+ * variable del ciclo no avanzaría.
  * La variable declarada en el inicio es un símbolo propio del for, así que
  * no choca con otra variable del mismo nombre fuera del ciclo. */
 static void gen_for(Node *n) {
-    Label ciclo = asm_label(&a), fin = asm_label(&a);
+    Label ciclo = asm_label(&a), paso = asm_label(&a), fin = asm_label(&a);
     if (n->a != NULL) gen_stmt(n->a);
     asm_bind(&a, ciclo);
     if (n->b != NULL) {
@@ -286,7 +310,10 @@ static void gen_for(Node *n) {
         x_test_rr(&a, RAX, RAX);
         x_jcc(&a, CC_E, fin);
     }
+    loop_open(fin, paso);
     gen_stmt(n->d);
+    loop_close();
+    asm_bind(&a, paso);
     if (n->c != NULL) gen_stmt(n->c);
     x_jmp(&a, ciclo);
     asm_bind(&a, fin);
@@ -321,6 +348,12 @@ static void gen_stmt(Node *n) {
             break;
         case N_FOR:
             gen_for(n);
+            break;
+        case N_BREAK:                   /* semantic.c ya verificó que hay un ciclo */
+            x_jmp(&a, loops[loop_count - 1].brk);
+            break;
+        case N_CONTINUE:
+            x_jmp(&a, loops[loop_count - 1].cont);
             break;
         case N_SWITCH:   not_supported(n->line, "'switch'"); break;
         case N_FUNC:     not_supported(n->line, "a function definition"); break;

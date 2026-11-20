@@ -70,3 +70,45 @@ for (int k = 2; k < 30; k = k + 1) {
     }
     if (prime) { print(k); }
 }
+
+// ---- break y continue ----
+for (int m = 1; m <= 10; m = m + 1) {
+    if (m % 2 == 0) { continue; }   // salta los pares; el paso sí se ejecuta
+    if (m > 7) { break; }           // termina en 9
+    print(m);                       // 1 3 5 7
+}
+
+// continue en while
+int w = 0;
+int impares = 0;
+while (w < 10) {
+    w = w + 1;
+    if (w % 2 == 0) { continue; }
+    impares = impares + w;
+}
+print(impares);                     // 1 + 3 + 5 + 7 + 9 = 25
+
+// break solo sale del ciclo más interno
+for (int x = 1; x <= 3; x = x + 1) {
+    for (int y = 1; y <= 3; y = y + 1) {
+        if (y > x) { break; }
+        print(x, y);
+    }
+}
+
+// ciclo sin condición que termina con break
+int pasos = 0;
+for (;;) {
+    pasos = pasos + 1;
+    if (pasos == 4) { break; }
+}
+print(pasos);                       // 4
+
+// while true con break y continue juntos
+int z = 0;
+while (true) {
+    z = z + 1;
+    if (z < 3) { continue; }
+    print(z);
+    if (z >= 5) { break; }
+}
