@@ -11,7 +11,7 @@ El compilador se reconstruye por etapas: cada rama contiene solo lo que existe h
 | 1 | `etapa-1/ejecutable-minimo` | Codificador de instrucciones y escritor ELF | Terminada |
 | 2 | `etapa-2/enteros-y-print` | Enteros, booleanos, variables, aritmética y `print` | Terminada |
 | 3 | `etapa-3/control-de-flujo` | `if`, `while`, `for`, `switch`, `break` y `continue` | Terminada |
-| 4 | `etapa-4/funciones` | Funciones, recursión, sobrecarga y funciones anidadas | Pendiente |
+| 4 | `etapa-4/funciones` | Funciones, recursión, sobrecarga y funciones anidadas | Terminada |
 | 5 | `etapa-5/cadenas-y-reales` | `string` y `float` | Pendiente |
 | 6 | `etapa-6/excepciones` | `try`-`catch`, `throw`, `assert` y errores de ejecución | Pendiente |
 | 7 | `etapa-7/vectores-y-matrices` | Arreglos, operaciones elemento a elemento y reducciones | Pendiente |
@@ -221,3 +221,77 @@ El programa imprime `0` y `2`: con `i == 1`, `continue` salta al paso y la varia
 | `tests/30_native_control_flow.vx` | Las tres ramas del `if`, `if` sin `else` y anidados, `while` y `for` anidados, `for` sin paso y sin condición, primos con `while` dentro de `for`, `break` y `continue` en ambos ciclos, y `switch` con expresiones, `default`, `bool`, anidado y con `break` |
 
 `tests/06_control_flow.vx` de `main` imprime cadenas; se recupera en la etapa 5.
+
+## Etapa 4: funciones
+
+### Marco de una función
+
+```
+              ...
+[rbp + 24 + 8*(n-1-k)]   parámetro k de n      (los apila quien llama, en orden)
+[rbp + 16]               enlace estático       (marco de la función que contiene la definición)
+[rbp + 8]                dirección de retorno  (la apila call)
+[rbp]                    rbp de quien llamó    (lo apila el prólogo)
+[rbp - 8], [rbp - 16]... variables locales
+```
+
+Una llamada calcula y apila los argumentos en el orden de los parámetros, apila el enlace estático, hace `call` y al volver quita los argumentos de la pila. El resultado queda en `rax`. `semantic.c` ya resolvió la sobrecarga (`n->sym` es la versión elegida, y cada versión tiene su propia etiqueta) y dejó los argumentos en el orden de los parámetros, con los valores por defecto en lugar de los que faltan. Por eso los parámetros nombrados y por defecto no necesitan nada en el generador. Un valor por defecto se calcula en cada llamada, como en la versión anterior.
+
+### Enlace estático
+
+Una función anidada puede leer y modificar las variables de las funciones que la contienen. Para eso cada marco guarda en `[rbp+16]` la dirección del marco de la función donde está escrita su definición (no de la que la llamó). El programa principal es el nivel 0, una función definida en él es de nivel 1, una definida dentro de esa es de nivel 2, y así. Para llegar a una variable de un nivel externo se sigue la cadena de enlaces tantos pasos como niveles separen a las dos funciones.
+
+Ejemplo (desensamblado con `objdump`):
+
+```
+func int outer(int p) {
+    func int inner(int r) { return p + r; }
+    return inner(2);
+}
+print(outer(40));                   // 42
+```
+
+```
+outer:  ...
+        mov  eax, 2                 ; argumento r
+        push rax
+        mov  rax, rbp               ; enlace estático de inner: el marco de outer
+        push rax
+        call inner
+        add  rsp, 0x10
+
+inner:  push rbp
+        mov  rbp, rsp
+        mov  rax, [rbp+0x10]        ; enlace estático: marco de outer
+        mov  rax, [rax+0x18]        ; p, el parámetro de outer
+        push rax
+        mov  rax, [rbp+0x18]        ; r, el parámetro propio
+        mov  rcx, rax
+        pop  rax
+        add  rax, rcx               ; p + r
+        mov  rsp, rbp
+        pop  rbp
+        ret
+```
+
+En la versión anterior esto lo resolvía GCC con su extensión de funciones anidadas; ahora es parte del generador.
+
+### Otras decisiones
+
+| Tema | Decisión |
+|---|---|
+| Posiciones de las variables | Una pasada previa asigna a cada variable su nivel y su posición antes de generar. Hace falta porque un valor por defecto se calcula en la llamada y puede nombrar una variable cuya declaración todavía no se generó |
+| Orden del código | Las funciones se generan después del código que las contiene, desde una cola, para no tener que saltar por encima de ellas |
+| Llamada antes de la definición y recursión mutua | La etiqueta de una función se crea la primera vez que se pide; el relleno posterior completa la llamada cuando se genera la función |
+| Límite de recursión | Un contador en la bss lleva las llamadas en curso. Se verifica y se incrementa antes de calcular los argumentos, como `vx_enter` en la versión anterior. Con 1000 llamadas en curso, la siguiente reporta `maximum recursion depth (1000) exceeded in 'f'` en lugar de agotar la pila |
+| Función sin `return` | Si una función con tipo llega al final sin `return`, se reporta `function 'f' must return a value of type T` con la línea de su definición |
+
+### Pruebas
+
+| Prueba | Qué demuestra |
+|---|---|
+| `tests/31_native_functions.vx` | Recursión simple y mutua, llamada antes de la definición, parámetros nombrados y por defecto, sobrecarga, tres niveles de funciones anidadas que modifican variables externas, `void` con `return` temprano, `return` dentro de ciclos, orden de evaluación con llamadas que tienen efectos (incluido que el valor de un `switch` se calcula una sola vez) y 1000 llamadas en curso |
+| `tests/12_recursion_limit.vx` | Recuperada de `main`: recursión infinita detenida con un error |
+| `tests/13_missing_return.vx` | Recuperada de `main`: función `int` que termina sin `return` |
+
+`tests/09_functions.vx` de `main` usa `float` y cadenas; se recupera en la etapa 5.

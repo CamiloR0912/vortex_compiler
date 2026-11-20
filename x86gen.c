@@ -15,20 +15,24 @@
  *                           <operación>      ; resultado en rax
  *   - No se asignan registros: cada valor intermedio vive en la pila.
  *
- * Variables:
- *   Todo el programa es una sola función con marco de pila:
+ * Variables y funciones:
+ *   El programa principal y cada función tienen su marco de pila:
  *         push rbp
  *         mov rbp, rsp
- *         sub rsp, N        ; N = 8 bytes por variable
- *   Cada variable ocupa 8 bytes en [rbp - 8k]. semantic.c le dio a cada
- *   símbolo un número único, así que dos variables con el mismo nombre en
- *   ámbitos distintos (shadowing) tienen posiciones distintas sin hacer
- *   nada especial.
+ *         sub rsp, N        ; N = 8 bytes por variable local
+ *   Cada variable ocupa 8 bytes en [rbp - 8k] del marco de la función que
+ *   la declara; los parámetros están en [rbp + 24...] y el enlace estático
+ *   en [rbp + 16]. semantic.c le dio a cada símbolo un número único, así
+ *   que dos variables con el mismo nombre en ámbitos distintos (shadowing)
+ *   tienen posiciones distintas sin hacer nada especial. Una función
+ *   anidada llega a las variables de las funciones que la contienen
+ *   siguiendo la cadena de enlaces estáticos.
  *
- * Alcance hasta la etapa 3: int, bool, variables, asignación, bloques,
+ * Alcance hasta la etapa 4: int, bool, variables, asignación, bloques,
  * aritmética, comparaciones, operadores lógicos, print, if/else, while,
- * for, break, continue y switch. Si el programa usa algo más, se reporta
- * como no soportado y no se genera el ejecutable.
+ * for, break, continue, switch y funciones (recursión, sobrecarga,
+ * parámetros nombrados y por defecto, funciones anidadas). Si el programa
+ * usa algo más, se reporta como no soportado y no se genera el ejecutable.
  * ========================================================================== */
 #include <stdlib.h>
 #include <string.h>
