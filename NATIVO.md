@@ -71,7 +71,9 @@ Como cada segmento empieza en una dirección fija, la dirección de un dato se c
 Desde WSL, en la carpeta del proyecto:
 
 ```
-bash run
+bash run                      # construye vortexc (no ejecuta pruebas)
+bash tests/nativo/run.sh      # pruebas del backend nativo
+bash tests/run_tests.sh       # programas Vortex (necesita vortexc construido)
 ```
 
 | Prueba | Qué demuestra | Salida esperada |
