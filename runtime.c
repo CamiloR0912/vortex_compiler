@@ -40,7 +40,7 @@ void rt_init(Asm *a, Runtime *rt) {
     rt->print_bool = asm_label(a);
     rt->print_str = asm_label(a);
     rt->exit = asm_label(a);
-    rt->error = asm_label(a);
+    rt->raise = asm_label(a);
     rt->alloc = asm_label(a);
     rt->strlen = asm_label(a);
     rt->copy_str = asm_label(a);
@@ -53,6 +53,8 @@ void rt_init(Asm *a, Runtime *rt) {
     rt->str_float = asm_label(a);
     rt->out_len = asm_bss(a, 8);
     rt->depth = asm_bss(a, 8);
+    rt->try_top = asm_bss(a, 8);
+    rt->handlers = asm_bss(a, MAX_TRY * 32);
     rt->heap_ptr = asm_bss(a, 8);
     rt->heap_end = asm_bss(a, 8);
     rt->num_buf = asm_bss(a, 128);
@@ -76,11 +78,10 @@ void rt_print_text(Asm *a, Runtime *rt, const char *text) {
 }
 
 void rt_fail(Asm *a, Runtime *rt, int line, const char *msg) {
-    int len = (int)strlen(msg);
-    x_mov_ri(a, RSI, asm_data(a, msg, len));
-    x_mov_ri(a, RDX, len);
+    x_mov_ri(a, RSI, rt_literal(a, msg, (int)strlen(msg)));
     x_mov_ri(a, RAX, line);
-    x_call(a, rt->error);
+    x_mov_ri(a, RDI, EXC_RUNTIME);
+    x_call(a, rt->raise);
 }
 
 /* write_all: escribe rdx bytes desde rsi en la salida estándar.
@@ -318,40 +319,149 @@ static void emit_exit(Asm *a, Runtime *rt) {
     x_syscall(a);
 }
 
-/* error: reporta un error de ejecución y termina con código 1.
- * Entrada: rax = línea del programa fuente, rsi y rdx = mensaje.
- * El mensaje se guarda en la pila mientras se imprime el encabezado,
- * porque las otras rutinas modifican rsi y rdx.
+/* ===================== Excepciones =====================
  *
- *           push rsi
- *           push rdx
- *           push rax
- *           (imprimir "[Runtime error] line ")
- *           pop rax
+ * Cada try activo tiene un manejador de 32 bytes en la pila de manejadores
+ * (handlers, en la bss); try_top es la cantidad de manejadores activos.
+ *     [h + 0]   rsp al entrar al try
+ *     [h + 8]   rbp al entrar al try (el marco de la función que lo contiene)
+ *     [h + 16]  dirección del catch
+ *     [h + 24]  llamadas en curso (depth) al entrar al try
+ * Es lo que antes hacían setjmp y longjmp.
+ *
+ * raise: lanza una excepción.
+ * Entrada: rdi = clase (EXC_RUNTIME, EXC_ASSERT o EXC_THROW), rax = línea,
+ * rsi = mensaje (cadena terminada en 0).
+ *   - Sin try activo: imprime "[Runtime error] line N: mensaje" (o
+ *     "[Assertion error]", "[Uncaught exception]") y termina con código 1.
+ *   - Con try activo: el texto para la variable del catch es el mensaje y
+ *     " (line N)", salvo en throw, donde es exactamente el valor lanzado.
+ *     Se retira el manejador, se restauran depth, rsp y rbp, y se salta al
+ *     catch con el texto en rax.
+ *
+ *           push rsi                ; [rsp+16] mensaje
+ *           push rax                ; [rsp+8]  línea
+ *           push rdi                ; [rsp]    clase
+ *           mov r8, try_top
+ *           mov rcx, [r8]
+ *           test rcx, rcx
+ *           jne capturar
+ *           (imprimir la etiqueta según la clase)
+ *           mov rax, [rsp+8]
  *           call print_int
  *           (imprimir ": ")
- *           pop rdx
- *           pop rsi
- *           call write
+ *           mov rax, [rsp+16]
+ *           call print_str
  *           (imprimir "\n")
  *           mov rdi, 1
  *           jmp exit
+ * capturar: mov rdi, [rsp]
+ *           cmp rdi, EXC_THROW
+ *           je es_throw
+ *           mov rax, [rsp+16]
+ *           mov rcx, " (line "
+ *           call concat             ; mensaje + " (line "
+ *           push rax
+ *           mov rax, [rsp+16]       ; línea
+ *           call str_int
+ *           mov rcx, rax
+ *           pop rax
+ *           call concat             ; + N
+ *           mov rcx, ")"
+ *           call concat             ; + ")"
+ *           jmp texto_listo
+ * es_throw: mov rax, [rsp+16]
+ * texto_listo:
+ *           mov r8, try_top
+ *           mov rcx, [r8]
+ *           sub rcx, 1
+ *           mov [r8], rcx           ; retirar el manejador
+ *           shl rcx, 5
+ *           mov rdx, handlers
+ *           add rcx, rdx            ; rcx = manejador
+ *           mov rdx, [rcx+24]
+ *           mov r9, depth
+ *           mov [r9], rdx           ; depth = el de la entrada al try
+ *           mov rsp, [rcx]
+ *           mov rbp, [rcx+8]
+ *           mov rdx, [rcx+16]
+ *           jmp rdx                 ; al catch, con el texto en rax
  */
-static void emit_error(Asm *a, Runtime *rt) {
-    asm_bind(a, rt->error);
+static void emit_raise(Asm *a, Runtime *rt) {
+    Label capturar = asm_label(a), no_assert = asm_label(a), etiqueta_lista = asm_label(a);
+    Label no_runtime = asm_label(a), es_throw = asm_label(a), texto_listo = asm_label(a);
+
+    asm_bind(a, rt->raise);
     x_push(a, RSI);
-    x_push(a, RDX);
     x_push(a, RAX);
+    x_push(a, RDI);
+    x_mov_ri(a, R8, rt->try_top);
+    x_load(a, RCX, R8, 0);
+    x_test_rr(a, RCX, RCX);
+    x_jcc(a, CC_NE, capturar);
+
+    /* Sin try activo: etiqueta según la clase */
+    x_load(a, RDI, RSP, 0);
+    x_mov_ri(a, RCX, EXC_RUNTIME);
+    x_cmp_rr(a, RDI, RCX);
+    x_jcc(a, CC_NE, no_runtime);
     rt_print_text(a, rt, "[Runtime error] line ");
-    x_pop(a, RAX);
+    x_jmp(a, etiqueta_lista);
+    asm_bind(a, no_runtime);
+    x_mov_ri(a, RCX, EXC_ASSERT);
+    x_cmp_rr(a, RDI, RCX);
+    x_jcc(a, CC_NE, no_assert);
+    rt_print_text(a, rt, "[Assertion error] line ");
+    x_jmp(a, etiqueta_lista);
+    asm_bind(a, no_assert);
+    rt_print_text(a, rt, "[Uncaught exception] line ");
+    asm_bind(a, etiqueta_lista);
+    x_load(a, RAX, RSP, 8);
     x_call(a, rt->print_int);
     rt_print_text(a, rt, ": ");
-    x_pop(a, RDX);
-    x_pop(a, RSI);
-    x_call(a, rt->write);
+    x_load(a, RAX, RSP, 16);
+    x_call(a, rt->print_str);
     rt_print_text(a, rt, "\n");
     x_mov_ri(a, RDI, 1);
     x_jmp(a, rt->exit);
+
+    /* Con try activo: texto para el catch */
+    asm_bind(a, capturar);
+    x_load(a, RDI, RSP, 0);
+    x_mov_ri(a, RCX, EXC_THROW);
+    x_cmp_rr(a, RDI, RCX);
+    x_jcc(a, CC_E, es_throw);
+    x_load(a, RAX, RSP, 16);
+    x_mov_ri(a, RCX, rt_literal(a, " (line ", 7));
+    x_call(a, rt->concat);
+    x_push(a, RAX);
+    x_load(a, RAX, RSP, 16);
+    x_call(a, rt->str_int);
+    x_mov_rr(a, RCX, RAX);
+    x_pop(a, RAX);
+    x_call(a, rt->concat);
+    x_mov_ri(a, RCX, rt_literal(a, ")", 1));
+    x_call(a, rt->concat);
+    x_jmp(a, texto_listo);
+    asm_bind(a, es_throw);
+    x_load(a, RAX, RSP, 16);
+    asm_bind(a, texto_listo);
+
+    /* Retirar el manejador y saltar al catch */
+    x_mov_ri(a, R8, rt->try_top);
+    x_load(a, RCX, R8, 0);
+    x_sub_ri(a, RCX, 1);
+    x_store(a, R8, 0, RCX);
+    x_shl_ri(a, RCX, 5);
+    x_mov_ri(a, RDX, rt->handlers);
+    x_add_rr(a, RCX, RDX);
+    x_load(a, RDX, RCX, 24);
+    x_mov_ri(a, R9, rt->depth);
+    x_store(a, R9, 0, RDX);
+    x_load(a, RSP, RCX, 0);
+    x_load(a, RBP, RCX, 8);
+    x_load(a, RDX, RCX, 16);
+    x_jmp_r(a, RDX);
 }
 
 /* ===================== Heap ===================== */
@@ -1247,7 +1357,7 @@ void rt_emit(Asm *a, Runtime *rt) {
     emit_print_bool(a, rt);
     emit_print_str(a, rt);
     emit_exit(a, rt);
-    emit_error(a, rt);
+    emit_raise(a, rt);
     emit_alloc(a, rt);
     emit_strlen(a, rt);
     emit_copy_str(a, rt);

@@ -33,6 +33,12 @@
 
 #define OUT_BUF_SIZE 4096
 #define HEAP_CHUNK   (1 << 20)      /* tamaño mínimo de cada bloque pedido con mmap */
+#define MAX_TRY      2048           /* bloques try activos al mismo tiempo, como antes */
+
+/* Clases de excepción: deciden la etiqueta de un error no capturado */
+#define EXC_RUNTIME  0              /* [Runtime error]: división entre cero, índices... */
+#define EXC_ASSERT   1              /* [Assertion error]: assert que falla               */
+#define EXC_THROW    2              /* [Uncaught exception]: throw                       */
 
 typedef struct {
     Label write;        /* agrega rdx bytes desde la dirección rsi a la salida */
@@ -55,11 +61,14 @@ typedef struct {
     Label print_float;  /* imprime el double con bits rax                      */
     Label str_float;    /* rax = cadena con el double con bits rax             */
     Label exit;         /* vacía el buffer y termina con código rdi            */
-    Label error;        /* imprime "[Runtime error] line rax: " y el mensaje
-                           (rsi = dirección, rdx = largo); termina con código 1 */
+    Label raise;        /* lanza una excepción: rdi = clase, rax = línea,
+                           rsi = mensaje; va al catch activo o, si no hay,
+                           imprime el error y termina con código 1         */
     uint64_t out_buf;   /* dirección del buffer de salida (bss)                */
     uint64_t out_len;   /* dirección del contador de bytes en el buffer (bss)  */
     uint64_t depth;     /* dirección del contador de llamadas en curso (bss)   */
+    uint64_t try_top;   /* cantidad de bloques try activos (bss)               */
+    uint64_t handlers;  /* pila de manejadores de try, 32 bytes cada uno (bss) */
     uint64_t num_buf;   /* espacio temporal para escribir números (bss)        */
     uint64_t heap_ptr;  /* siguiente byte libre del bloque actual (bss)        */
     uint64_t heap_end;  /* fin del bloque actual (bss)                         */
@@ -80,8 +89,8 @@ void rt_print_text(Asm *a, Runtime *rt, const char *text);
 /* Guarda un texto en los datos, terminado en 0, y devuelve su dirección */
 uint64_t rt_literal(Asm *a, const char *text, int len);
 
-/* Emite el código que reporta un error de ejecución en la línea indicada
- * del programa fuente y termina */
+/* Emite el código que lanza un error de ejecución (EXC_RUNTIME) con el
+ * mensaje y la línea del programa fuente indicados */
 void rt_fail(Asm *a, Runtime *rt, int line, const char *msg);
 
 #endif
