@@ -30,6 +30,8 @@ typedef struct {
     Label print_int;    /* imprime rax como entero decimal con signo           */
     Label print_bool;   /* imprime "true" si rax != 0, si no "false"           */
     Label exit;         /* vacía el buffer y termina con código rdi            */
+    Label error;        /* imprime "[Runtime error] line rax: " y el mensaje
+                           (rsi = dirección, rdx = largo); termina con código 1 */
     uint64_t out_buf;   /* dirección del buffer de salida (bss)                */
     uint64_t out_len;   /* dirección del contador de bytes en el buffer (bss)  */
     uint64_t text_true, text_false;
@@ -44,5 +46,9 @@ void rt_emit(Asm *a, Runtime *rt);
 
 /* Emite el código que imprime un texto fijo (se guarda en los datos) */
 void rt_print_text(Asm *a, Runtime *rt, const char *text);
+
+/* Emite el código que reporta un error de ejecución en la línea indicada
+ * del programa fuente y termina */
+void rt_fail(Asm *a, Runtime *rt, int line, const char *msg);
 
 #endif

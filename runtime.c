@@ -14,6 +14,7 @@ void rt_init(Asm *a, Runtime *rt) {
     rt->print_int = asm_label(a);
     rt->print_bool = asm_label(a);
     rt->exit = asm_label(a);
+    rt->error = asm_label(a);
     rt->out_len = asm_bss(a, 8);
     rt->out_buf = asm_bss(a, OUT_BUF_SIZE);
     rt->text_true = asm_data(a, "true", 4);
@@ -25,6 +26,14 @@ void rt_print_text(Asm *a, Runtime *rt, const char *text) {
     x_mov_ri(a, RSI, asm_data(a, text, len));
     x_mov_ri(a, RDX, len);
     x_call(a, rt->write);
+}
+
+void rt_fail(Asm *a, Runtime *rt, int line, const char *msg) {
+    int len = (int)strlen(msg);
+    x_mov_ri(a, RSI, asm_data(a, msg, len));
+    x_mov_ri(a, RDX, len);
+    x_mov_ri(a, RAX, line);
+    x_call(a, rt->error);
 }
 
 /* write_all: escribe rdx bytes desde rsi en la salida estándar.
@@ -261,6 +270,42 @@ static void emit_exit(Asm *a, Runtime *rt) {
     x_syscall(a);
 }
 
+/* error: reporta un error de ejecución y termina con código 1.
+ * Entrada: rax = línea del programa fuente, rsi y rdx = mensaje.
+ * El mensaje se guarda en la pila mientras se imprime el encabezado,
+ * porque las otras rutinas modifican rsi y rdx.
+ *
+ *           push rsi
+ *           push rdx
+ *           push rax
+ *           (imprimir "[Runtime error] line ")
+ *           pop rax
+ *           call print_int
+ *           (imprimir ": ")
+ *           pop rdx
+ *           pop rsi
+ *           call write
+ *           (imprimir "\n")
+ *           mov rdi, 1
+ *           jmp exit
+ */
+static void emit_error(Asm *a, Runtime *rt) {
+    asm_bind(a, rt->error);
+    x_push(a, RSI);
+    x_push(a, RDX);
+    x_push(a, RAX);
+    rt_print_text(a, rt, "[Runtime error] line ");
+    x_pop(a, RAX);
+    x_call(a, rt->print_int);
+    rt_print_text(a, rt, ": ");
+    x_pop(a, RDX);
+    x_pop(a, RSI);
+    x_call(a, rt->write);
+    rt_print_text(a, rt, "\n");
+    x_mov_ri(a, RDI, 1);
+    x_jmp(a, rt->exit);
+}
+
 void rt_emit(Asm *a, Runtime *rt) {
     emit_write_all(a, rt);
     emit_flush(a, rt);
@@ -268,4 +313,5 @@ void rt_emit(Asm *a, Runtime *rt) {
     emit_print_int(a, rt);
     emit_print_bool(a, rt);
     emit_exit(a, rt);
+    emit_error(a, rt);
 }
