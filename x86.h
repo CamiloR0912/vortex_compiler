@@ -79,10 +79,17 @@ void asm_finish(Asm *a);            /* completa los saltos; error si falta una e
 /* Condiciones de los saltos condicionales: el valor es el que se suma
  * al opcode 0F 80 (manual de Intel, instrucción Jcc). */
 typedef enum {
-    CC_E = 0x4,  CC_NE = 0x5,   /* igual / distinto (ZF)            */
-    CC_L = 0xC,  CC_GE = 0xD,   /* menor / mayor o igual, con signo */
-    CC_LE = 0xE, CC_G = 0xF     /* menor o igual / mayor, con signo */
+    CC_B = 0x2,  CC_AE = 0x3,   /* menor / mayor o igual, sin signo (CF)     */
+    CC_E = 0x4,  CC_NE = 0x5,   /* igual / distinto (ZF)                     */
+    CC_BE = 0x6, CC_A = 0x7,    /* menor o igual / mayor, sin signo (CF, ZF) */
+    CC_P = 0xA,  CC_NP = 0xB,   /* paridad: ucomisd la activa si hay un NaN  */
+    CC_L = 0xC,  CC_GE = 0xD,   /* menor / mayor o igual, con signo          */
+    CC_LE = 0xE, CC_G = 0xF     /* menor o igual / mayor, con signo          */
 } Cond;
+
+/* Registros SSE de 128 bits; para números de doble precisión solo se usan
+ * sus 64 bits bajos. El generador usa xmm0 a xmm7, que no necesitan REX. */
+typedef enum { XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7 } Xmm;
 
 /* Agrega bytes al final de un buffer */
 void buf_byte(Buf *b, int byte);
@@ -128,7 +135,21 @@ void x_idiv(Asm *a, Reg r);                             /* idiv r               
 void x_div(Asm *a, Reg r);                              /* div r (sin signo)      */
 void x_store8(Asm *a, Reg base, int32_t disp, Reg src); /* mov byte [base+disp], src8 */
 void x_rep_movsb(Asm *a);                               /* rep movsb              */
+void x_and_rr(Asm *a, Reg dst, Reg src);                /* and dst, src           */
+void x_or_rr(Asm *a, Reg dst, Reg src);                 /* or dst, src            */
+void x_xor_rr(Asm *a, Reg dst, Reg src);                /* xor dst, src           */
 void x_setcc_al(Asm *a, Cond cc);                       /* set<cc> al             */
+
+/* ---- Punto flotante (SSE2, doble precisión) ---- */
+void x_movq_xr(Asm *a, Xmm dst, Reg src);               /* movq xmm, r64 (copia bits) */
+void x_movq_rx(Asm *a, Reg dst, Xmm src);               /* movq r64, xmm (copia bits) */
+void x_addsd(Asm *a, Xmm dst, Xmm src);                 /* addsd dst, src         */
+void x_subsd(Asm *a, Xmm dst, Xmm src);                 /* subsd dst, src         */
+void x_mulsd(Asm *a, Xmm dst, Xmm src);                 /* mulsd dst, src         */
+void x_divsd(Asm *a, Xmm dst, Xmm src);                 /* divsd dst, src         */
+void x_ucomisd(Asm *a, Xmm x, Xmm y);                   /* ucomisd x, y           */
+void x_cvtsi2sd(Asm *a, Xmm dst, Reg src);              /* entero -> real         */
+void x_cvtsd2si(Asm *a, Reg dst, Xmm src);              /* real -> entero, redondeando al más cercano */
 void x_movzx_rax_al(Asm *a);                            /* movzx rax, al          */
 
 /* ---- elf.c ----

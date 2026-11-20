@@ -54,6 +54,28 @@ static void check(const char *nombre, int64_t esperado) {
     asm_bind(&a, siguiente);
 }
 
+/* Bits IEEE 754 de un double: así viaja un float en rax */
+static uint64_t bits(double d) {
+    uint64_t u;
+    memcpy(&u, &d, sizeof u);
+    return u;
+}
+
+/* xmm = el double v, pasando por rax */
+static void load_double(Xmm x, double v) {
+    x_mov_ri(&a, RAX, bits(v));
+    x_movq_xr(&a, x, RAX);
+}
+
+/* rax = 0 o 1 según una condición después de ucomisd x, y */
+static void compare_doubles(double x, double y, Cond cc) {
+    load_double(XMM0, x);
+    load_double(XMM1, y);
+    x_ucomisd(&a, XMM0, XMM1);
+    x_setcc_al(&a, cc);
+    x_movzx_rax_al(&a);
+}
+
 /* Variables del programa generado */
 #define VAR_A (-8)
 #define VAR_B (-16)
@@ -168,6 +190,65 @@ int main(int argc, char **argv) {
     x_rep_movsb(&a);
     x_load(&a, RAX, RBP, VAR_B);
     check("rep movsb", 7);
+
+    /* ---- Punto flotante: los resultados se comparan como bits IEEE 754 ---- */
+    load_double(XMM0, 1.5);
+    load_double(XMM1, 2.25);
+    x_addsd(&a, XMM0, XMM1);
+    x_movq_rx(&a, RAX, XMM0);
+    check("addsd: 1.5 + 2.25", (int64_t)bits(3.75));
+
+    load_double(XMM2, 10.0);
+    load_double(XMM3, 4.0);
+    x_subsd(&a, XMM2, XMM3);                /* 6.0 */
+    load_double(XMM3, 3.0);
+    x_mulsd(&a, XMM2, XMM3);                /* 18.0 */
+    load_double(XMM3, 4.0);
+    x_divsd(&a, XMM2, XMM3);                /* 4.5 */
+    x_movq_rx(&a, RAX, XMM2);
+    check("subsd, mulsd, divsd: (10 - 4) * 3 / 4", (int64_t)bits(4.5));
+
+    x_mov_ri(&a, RAX, (uint64_t)-7);
+    x_cvtsi2sd(&a, XMM5, RAX);
+    x_movq_rx(&a, RAX, XMM5);
+    check("cvtsi2sd: -7 -> -7.0", (int64_t)bits(-7.0));
+
+    load_double(XMM0, 2.5);
+    x_cvtsd2si(&a, RAX, XMM0);
+    check("cvtsd2si: 2.5 -> 2 (empate al par)", 2);
+    load_double(XMM0, 3.5);
+    x_cvtsd2si(&a, RAX, XMM0);
+    check("cvtsd2si: 3.5 -> 4 (empate al par)", 4);
+    load_double(XMM0, -2.7);
+    x_cvtsd2si(&a, R10, XMM0);
+    x_mov_rr(&a, RAX, R10);
+    check("cvtsd2si: -2.7 -> -3 (en r10)", -3);
+
+    compare_doubles(2.0, 1.0, CC_A);
+    check("ucomisd: 2.0 > 1.0", 1);
+    compare_doubles(1.0, 2.0, CC_A);
+    check("ucomisd: 1.0 > 2.0", 0);
+    compare_doubles(1.0, 1.0, CC_E);
+    check("ucomisd: 1.0 == 1.0", 1);
+    x_mov_ri(&a, RAX, 0x7FF8000000000000ULL);  /* NaN */
+    x_movq_xr(&a, XMM0, RAX);
+    load_double(XMM1, 1.0);
+    x_ucomisd(&a, XMM0, XMM1);
+    x_setcc_al(&a, CC_P);
+    x_movzx_rax_al(&a);
+    check("ucomisd: NaN activa la paridad", 1);
+
+    /* Operaciones de bits */
+    x_mov_ri(&a, RAX, bits(2.5));
+    x_mov_ri(&a, RCX, 0x8000000000000000ULL);
+    x_xor_rr(&a, RAX, RCX);
+    check("xor con el bit de signo: 2.5 -> -2.5", (int64_t)bits(-2.5));
+    x_mov_ri(&a, RAX, 0xF0F0);
+    x_mov_ri(&a, R11, 0xFF00);
+    x_and_rr(&a, RAX, R11);
+    x_mov_ri(&a, RCX, 0x000F);
+    x_or_rr(&a, RAX, RCX);
+    check("and y or: (0xF0F0 & 0xFF00) | 0xF", 0xF00F);
 
     /* Salida: deshacer el marco y exit(0) */
     x_mov_rr(&a, RSP, RBP);

@@ -354,6 +354,56 @@ void x_rep_movsb(Asm *a) {
     buf_byte(&a->code, 0xA4);
 }
 
+/* Operaciones de bits entre registros:
+ *   and dst, src   REX.W 21 /r
+ *   or  dst, src   REX.W 09 /r
+ *   xor dst, src   REX.W 31 /r */
+void x_and_rr(Asm *a, Reg dst, Reg src) { op_rr(a, 0x21, src, dst); }
+void x_or_rr(Asm *a, Reg dst, Reg src)  { op_rr(a, 0x09, src, dst); }
+void x_xor_rr(Asm *a, Reg dst, Reg src) { op_rr(a, 0x31, src, dst); }
+
+/* ==========================================================================
+ * Punto flotante con SSE2
+ *
+ * Forma:  [prefijo] [REX] 0F opcode ModR/M
+ * El prefijo obligatorio (66 o F2) va ANTES del REX; si se invierte el
+ * orden, el procesador ignora el REX.
+ *   F2 = operación escalar de doble precisión (…sd)
+ *   66 = movq y ucomisd
+ * ========================================================================== */
+static void sse(Asm *a, int prefix, int w, int opcode, int reg, int rm) {
+    buf_byte(&a->code, prefix);
+    rex(a, w, reg, rm);
+    buf_byte(&a->code, 0x0F);
+    buf_byte(&a->code, opcode);
+    modrm_reg(a, reg, rm);
+}
+
+/* movq xmm, r64: 66 REX.W 0F 6E /r    movq r64, xmm: 66 REX.W 0F 7E /r
+ * Copian los 64 bits sin convertirlos: así un double viaja en rax igual
+ * que cualquier otro valor de la máquina de pila. */
+void x_movq_xr(Asm *a, Xmm dst, Reg src) { sse(a, 0x66, 1, 0x6E, dst, src); }
+void x_movq_rx(Asm *a, Reg dst, Xmm src) { sse(a, 0x66, 1, 0x7E, src, dst); }
+
+/* Aritmética escalar de doble precisión: F2 0F 58/5C/59/5E /r */
+void x_addsd(Asm *a, Xmm dst, Xmm src) { sse(a, 0xF2, 0, 0x58, dst, src); }
+void x_subsd(Asm *a, Xmm dst, Xmm src) { sse(a, 0xF2, 0, 0x5C, dst, src); }
+void x_mulsd(Asm *a, Xmm dst, Xmm src) { sse(a, 0xF2, 0, 0x59, dst, src); }
+void x_divsd(Asm *a, Xmm dst, Xmm src) { sse(a, 0xF2, 0, 0x5E, dst, src); }
+
+/* ucomisd x, y: 66 0F 2E /r
+ * Compara y deja el resultado en banderas de comparación SIN signo:
+ *   x > y: CF=0 ZF=0    x < y: CF=1 ZF=0    x == y: CF=0 ZF=1
+ *   si alguno es NaN ("no ordenados"): ZF=1 PF=1 CF=1
+ * Por eso después se usan las condiciones A, AE, B, BE, y P para el NaN. */
+void x_ucomisd(Asm *a, Xmm x, Xmm y) { sse(a, 0x66, 0, 0x2E, x, y); }
+
+/* cvtsi2sd xmm, r64: F2 REX.W 0F 2A /r  (entero con signo -> double)
+ * cvtsd2si r64, xmm: F2 REX.W 0F 2D /r  (double -> entero, redondeando al
+ *                    más cercano y, en caso de empate, al par) */
+void x_cvtsi2sd(Asm *a, Xmm dst, Reg src) { sse(a, 0xF2, 1, 0x2A, dst, src); }
+void x_cvtsd2si(Asm *a, Reg dst, Xmm src) { sse(a, 0xF2, 1, 0x2D, dst, src); }
+
 /* set<cc> al: 0F 90+cc /0  pone al = 1 si se cumple la condición, si no 0.
  * movzx rax, al: REX.W 0F B6 /r  copia al en rax rellenando con ceros.
  * Juntas convierten el resultado de una comparación en el valor 0 o 1. */

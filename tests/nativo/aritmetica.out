@@ -16,4 +16,16 @@ ok 15 memoria con base rsp
 ok 16 div sin signo: 2^63 / 10
 ok 17 byte desde dil
 ok 18 rep movsb
+ok 19 addsd: 1.5 + 2.25
+ok 20 subsd, mulsd, divsd: (10 - 4) * 3 / 4
+ok 21 cvtsi2sd: -7 -> -7.0
+ok 22 cvtsd2si: 2.5 -> 2 (empate al par)
+ok 23 cvtsd2si: 3.5 -> 4 (empate al par)
+ok 24 cvtsd2si: -2.7 -> -3 (en r10)
+ok 25 ucomisd: 2.0 > 1.0
+ok 26 ucomisd: 1.0 > 2.0
+ok 27 ucomisd: 1.0 == 1.0
+ok 28 ucomisd: NaN activa la paridad
+ok 29 xor con el bit de signo: 2.5 -> -2.5
+ok 30 and y or: (0xF0F0 & 0xFF00) | 0xF
 exit code: 0
