@@ -73,6 +73,13 @@ static int var_offset(Symbol *s) {
     return slot_of[s->id];
 }
 
+/* Reserva en el marco una posición que no corresponde a ninguna variable
+ * del programa (por ejemplo, el valor de un switch) */
+static int temp_offset(void) {
+    frame_size += 8;
+    return -frame_size;
+}
+
 /* ===================== Expresiones ===================== */
 
 /* Deja en rax un 1 si se cumple la condición sobre las banderas, si no 0 */
@@ -319,6 +326,47 @@ static void gen_for(Node *n) {
     asm_bind(&a, fin);
 }
 
+/* switch (valor) { case v1: { ... } case v2: { ... } default: { ... } }
+ * Como en la versión anterior, es una cadena de comparaciones sin paso de
+ * un case al siguiente (sin fall-through). El valor se calcula una sola
+ * vez y se guarda en una posición propia del marco; cada case calcula su
+ * expresión y la compara:
+ *           <valor>
+ *           mov [rbp+t], rax
+ *           <expresión del case 1>
+ *           mov rcx, [rbp+t]
+ *           cmp rcx, rax
+ *           jne siguiente1
+ *           <bloque 1>
+ *           jmp fin
+ * siguiente1:
+ *           ...
+ *           <bloque default>      ; sin comparación
+ * fin:
+ * El switch no es un ciclo: un break dentro de él sale del ciclo que lo
+ * contiene, igual que en la versión anterior. */
+static void gen_switch(Node *n) {
+    Label fin = asm_label(&a);
+    int t = temp_offset();
+    Node *c;
+
+    gen_expr(n->a);
+    x_store(&a, RBP, t, RAX);
+    for (c = n->b; c != NULL; c = c->next) {
+        Label siguiente = asm_label(&a);
+        if (c->a != NULL) {                 /* case; NULL es default */
+            gen_expr(c->a);
+            x_load(&a, RCX, RBP, t);
+            x_cmp_rr(&a, RCX, RAX);
+            x_jcc(&a, CC_NE, siguiente);
+        }
+        gen_stmt(c->b);
+        x_jmp(&a, fin);
+        asm_bind(&a, siguiente);
+    }
+    asm_bind(&a, fin);
+}
+
 static void gen_stmt(Node *n) {
     switch (n->kind) {
         case N_VARDECL:
@@ -355,7 +403,9 @@ static void gen_stmt(Node *n) {
         case N_CONTINUE:
             x_jmp(&a, loops[loop_count - 1].cont);
             break;
-        case N_SWITCH:   not_supported(n->line, "'switch'"); break;
+        case N_SWITCH:
+            gen_switch(n);
+            break;
         case N_FUNC:     not_supported(n->line, "a function definition"); break;
         case N_TRY:      not_supported(n->line, "'try'"); break;
         case N_ASSERT:   not_supported(n->line, "'assert'"); break;

@@ -112,3 +112,44 @@ while (true) {
     print(z);
     if (z >= 5) { break; }
 }
+
+// ---- switch-case (sin fall-through) ----
+for (int day = 1; day <= 4; day = day + 1) {
+    switch (day) {
+        case 1:     { print(day, 100); }
+        case 2:     { print(day, 200); }
+        case 1 + 2: { print(day, 300); }   // el case acepta expresiones
+        default:    { print(day, 0); }
+    }
+}
+
+// switch sobre bool y switch anidado
+switch (2 * 3 > 5) {
+    case true: {
+        print(true);
+        switch (7 % 4) {
+            case 1: { print(1); }
+            case 3: { print(3); }
+        }
+    }
+    case false: { print(false); }
+}
+
+// sin default y sin coincidencia: no hace nada
+switch (42) { case 1: { print(1); } }
+
+// el valor del switch puede ser una expresión
+int veces = 0;
+switch (veces + 10) {
+    case 9:  { print(9); }
+    case 10: { print(10); }
+}
+
+// break dentro de un switch sale del ciclo que lo contiene
+for (int q = 1; q <= 5; q = q + 1) {
+    switch (q) {
+        case 3:  { break; }
+        default: { print(q); }
+    }
+}
+print(-1);
