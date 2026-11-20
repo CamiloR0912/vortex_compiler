@@ -44,6 +44,7 @@ static int slot_cap = 0;
 static int frame_size = 0;
 
 static void gen_expr(Node *n);
+static void gen_stmt(Node *n);
 static void gen_stmts(Node *list);
 
 static void not_supported(int line, const char *what) {
@@ -213,6 +214,40 @@ static void gen_print(Node *n) {
     if (count > 0) x_add_ri(&a, RSP, 8 * count);
 }
 
+/* if / else if / else. Cada condición deja 0 o 1 en rax:
+ *           <condición 1>
+ *           test rax, rax
+ *           je siguiente1         ; falsa: probar la siguiente rama
+ *           <bloque 1>
+ *           jmp fin
+ * siguiente1:
+ *           <condición 2>         ; else if
+ *           ...
+ *           <bloque else>
+ * fin: */
+static void gen_if(Node *n) {
+    Label fin = asm_label(&a);
+    for (;;) {
+        Label siguiente = asm_label(&a);
+        gen_expr(n->a);
+        x_test_rr(&a, RAX, RAX);
+        x_jcc(&a, CC_E, siguiente);
+        gen_stmt(n->b);
+        if (n->c == NULL) {                 /* sin else */
+            asm_bind(&a, siguiente);
+            break;
+        }
+        x_jmp(&a, fin);
+        asm_bind(&a, siguiente);
+        if (n->c->kind == N_BLOCK) {        /* else final */
+            gen_stmt(n->c);
+            break;
+        }
+        n = n->c;                           /* else if: otra vuelta */
+    }
+    asm_bind(&a, fin);
+}
+
 static void gen_stmt(Node *n) {
     switch (n->kind) {
         case N_VARDECL:
@@ -234,7 +269,9 @@ static void gen_stmt(Node *n) {
         case N_PRINT:
             gen_print(n);
             break;
-        case N_IF:       not_supported(n->line, "'if'"); break;
+        case N_IF:
+            gen_if(n);
+            break;
         case N_WHILE:    not_supported(n->line, "'while'"); break;
         case N_FOR:      not_supported(n->line, "'for'"); break;
         case N_SWITCH:   not_supported(n->line, "'switch'"); break;
