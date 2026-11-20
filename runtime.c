@@ -16,6 +16,7 @@ void rt_init(Asm *a, Runtime *rt) {
     rt->exit = asm_label(a);
     rt->error = asm_label(a);
     rt->out_len = asm_bss(a, 8);
+    rt->depth = asm_bss(a, 8);
     rt->out_buf = asm_bss(a, OUT_BUF_SIZE);
     rt->text_true = asm_data(a, "true", 4);
     rt->text_false = asm_data(a, "false", 5);

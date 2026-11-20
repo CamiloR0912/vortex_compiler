@@ -316,11 +316,40 @@ static void gen_binary(Node *n) {
  *           call f
  *           add rsp, 8 * (n + 1)  ; quitar argumentos y enlace
  * El resultado queda en rax. Un valor por defecto se calcula aquí, en
- * cada llamada, como en la versión anterior. */
+ * cada llamada, como en la versión anterior.
+ *
+ * Límite de recursión: un contador en la bss lleva las llamadas en curso.
+ * Como en la versión anterior, se verifica y se incrementa antes de
+ * calcular los argumentos, y se decrementa al volver. Con 1000 llamadas
+ * en curso, la siguiente es un error de ejecución en lugar de agotar la
+ * pila del proceso. */
+#define MAX_DEPTH 1000
+
 static void gen_call(Node *n) {
     SymInfo *fi = sym_info(n->sym);
+    Label ok = asm_label(&a);
+    char msg[160];
     Node *b;
     int count = 0;
+
+    /*       mov rcx, depth
+     *       mov rax, [rcx]
+     *       mov rdx, 1000
+     *       cmp rax, rdx
+     *       jl ok
+     *       <error>
+     * ok:   add rax, 1
+     *       mov [rcx], rax */
+    snprintf(msg, sizeof msg, "maximum recursion depth (%d) exceeded in '%s'", MAX_DEPTH, n->text);
+    x_mov_ri(&a, RCX, rt.depth);
+    x_load(&a, RAX, RCX, 0);
+    x_mov_ri(&a, RDX, MAX_DEPTH);
+    x_cmp_rr(&a, RAX, RDX);
+    x_jcc(&a, CC_L, ok);
+    rt_fail(&a, &rt, n->line, msg);
+    asm_bind(&a, ok);
+    x_add_ri(&a, RAX, 1);
+    x_store(&a, RCX, 0, RAX);
 
     for (b = n->b; b != NULL; b = b->next) {
         if (!is_scalar(b->type)) { not_supported(n->line, "a parameter of this type"); return; }
@@ -332,6 +361,12 @@ static void gen_call(Node *n) {
     x_push(&a, RAX);
     x_call(&a, func_label(n->sym));
     x_add_ri(&a, RSP, 8 * (count + 1));
+
+    /* depth = depth - 1, sin tocar rax, que tiene el resultado */
+    x_mov_ri(&a, RCX, rt.depth);
+    x_load(&a, RDX, RCX, 0);
+    x_sub_ri(&a, RDX, 1);
+    x_store(&a, RCX, 0, RDX);
 }
 
 static void gen_expr(Node *n) {
@@ -605,7 +640,9 @@ static void gen_stmts(Node *list) {
  *           mov rsp, rbp          ; fin sin return (función void)
  *           pop rbp
  *           ret
- * Cada return deja su valor en rax y hace la misma salida. */
+ * Cada return deja su valor en rax y hace la misma salida. Si una función
+ * con tipo llega al final sin return, es un error de ejecución con la
+ * línea de su definición, como en la versión anterior. */
 static void gen_function(Node *f) {
     SymInfo *fi = sym_info(f->sym);
     Node *p;
@@ -629,7 +666,14 @@ static void gen_function(Node *f) {
     frame_at = a.code.len - 4;
 
     gen_stmts(f->b->a);
-    gen_epilogue();
+    if (f->type.kind == TY_VOID) {
+        gen_epilogue();
+    } else {
+        char msg[160];
+        snprintf(msg, sizeof msg, "function '%s' must return a value of type %s",
+                 f->text, type_name(f->type));
+        rt_fail(&a, &rt, f->line, msg);
+    }
 
     asm_patch_u32(&a, frame_at, (uint32_t)frame_size);
 }

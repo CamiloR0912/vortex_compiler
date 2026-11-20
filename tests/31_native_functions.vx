@@ -130,3 +130,11 @@ print(counter);                             // 4
 // llamadas como argumentos de otras llamadas
 func int add(int p, int q) { return p + q; }
 print(add(add(1, 2), add(3, add(4, 5))));   // 15
+
+// ---- Límite de recursión: con 1000 llamadas en curso todavía funciona
+//      (12_recursion_limit.vx prueba el caso que lo supera) ----
+func int depth(int n) {
+    if (n == 0) { return 0; }
+    return 1 + depth(n - 1);
+}
+print(depth(999));                          // 999: depth(999) ... depth(0) son 1000 llamadas

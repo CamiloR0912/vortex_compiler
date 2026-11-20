@@ -34,6 +34,7 @@ typedef struct {
                            (rsi = dirección, rdx = largo); termina con código 1 */
     uint64_t out_buf;   /* dirección del buffer de salida (bss)                */
     uint64_t out_len;   /* dirección del contador de bytes en el buffer (bss)  */
+    uint64_t depth;     /* dirección del contador de llamadas en curso (bss)   */
     uint64_t text_true, text_false;
 } Runtime;
 
