@@ -3,6 +3,9 @@
  *
  *   lexer.l + parser.y   texto  -> árbol de sintaxis abstracta (AST)
  *   semantic.c           revisa tipos, ámbitos y sobrecarga; anota el AST
+ *   x86gen.c             AST anotado -> instrucciones x86-64
+ *   runtime.c            rutinas de ejecución incluidas en cada ejecutable
+ *   x86enc.c, elf.c      instrucciones -> bytes -> archivo ejecutable ELF
  *   main.c               coordina las etapas
  * ========================================================================== */
 #ifndef VORTEX_H
@@ -110,5 +113,10 @@ extern int num_errors;
 
 /* ---- semantic.c ---- */
 void semantic_check(Node *program);
+
+/* ---- x86gen.c ----
+ * Escribe el ejecutable; devuelve 0 si lo generó, la cantidad de
+ * construcciones aún no soportadas, o -1 si no pudo escribir el archivo. */
+int generate_native(Node *program, const char *path);
 
 #endif

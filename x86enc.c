@@ -106,6 +106,11 @@ uint64_t asm_data(Asm *a, const void *src, int len) {
     return addr;
 }
 
+void asm_patch_u32(Asm *a, int at, uint32_t v) {
+    int k;
+    for (k = 0; k < 4; k++) a->code.bytes[at + k] = (v >> (8 * k)) & 0xFF;
+}
+
 uint64_t asm_bss(Asm *a, int len) {
     uint64_t addr;
     a->bss_len = (a->bss_len + 7) / 8 * 8;     /* alinear a 8 bytes */

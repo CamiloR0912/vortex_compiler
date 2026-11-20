@@ -96,6 +96,11 @@ uint64_t asm_data(Asm *a, const void *src, int len);
 /* Reserva len bytes en cero (alineados a 8) y devuelve su dirección */
 uint64_t asm_bss(Asm *a, int len);
 
+/* Reescribe 4 bytes ya emitidos en la posición at del código. Sirve para
+ * completar un valor que solo se conoce después, como el tamaño del marco
+ * de pila en "sub rsp, N", que depende de cuántas variables hay. */
+void asm_patch_u32(Asm *a, int at, uint32_t v);
+
 /* ---- Instrucciones ---- */
 void x_mov_ri(Asm *a, Reg dst, uint64_t imm);   /* mov dst, imm   */
 void x_syscall(Asm *a);                         /* syscall        */
