@@ -1,0 +1,115 @@
+// Programa científico completo: estadística, álgebra lineal y métodos numéricos.
+// Usa todos los elementos del lenguaje en un solo script.
+
+// ---- Estadística descriptiva ----
+func float mean(vector<float> xs) {
+    assert(len(xs) > 0, "mean of an empty vector");
+    return sum(xs) / len(xs);
+}
+
+func float variance(vector<float> xs) {
+    float m = mean(xs);
+    vector<float> d = xs - m;               // resta elemento a elemento
+    return sum(d * d) / len(xs);
+}
+
+// Raíz cuadrada por el método de Newton, con función anidada
+func float sqrt(float x) {
+    assert(x >= 0, "sqrt of a negative number");
+    func float improve(float guess) { return (guess + x / guess) / 2; }
+    if (x == 0) { return 0.0; }
+    float guess = x;
+    for (int i = 0; i < 40; i = i + 1) { guess = improve(guess); }
+    return guess;
+}
+
+vector<float> data = [2, 4, 4, 4, 5, 5, 7, 9];
+print("data     =", data);
+print("mean     =", mean(data));
+print("variance =", variance(data));
+print("std dev  =", sqrt(variance(data)));
+print("range    =", max(data) - min(data));
+
+// ---- Álgebra lineal ----
+func matrix<int> multiply(matrix<int> a, matrix<int> b) {
+    assert(len(a[0]) == len(b), "incompatible shapes");
+    matrix<int> c = [[0, 0], [0, 0]];
+    for (int i = 0; i < len(a); i = i + 1) {
+        for (int j = 0; j < len(b[0]); j = j + 1) {
+            int cell = 0;
+            for (int k = 0; k < len(b); k = k + 1) {
+                cell = cell + a[i][k] * b[k][j];
+            }
+            c[i][j] = cell;
+        }
+    }
+    return c;
+}
+
+// Sobrecarga: producto punto para enteros y para flotantes
+func int dot(vector<int> a, vector<int> b)       { return sum(a * b); }
+func float dot(vector<float> a, vector<float> b) { return sum(a * b); }
+
+matrix<int> a = [[1, 2], [3, 4]];
+matrix<int> identity = [[1, 0], [0, 1]];
+print("a * a    =", multiply(a, a));
+print("a * I == a:", multiply(a, identity) == a);
+print("dot int  =", dot([1, 2, 3], [4, 5, 6]));
+print("dot float=", dot([0.5, 1.5], [2.0, 4.0]));
+
+// ---- Recursión: potencia rápida y máximo común divisor ----
+func int power(int base, int exp) {
+    if (exp == 0) { return 1; }
+    int half = power(base, exp / 2);
+    if (exp % 2 == 0) { return half * half; }
+    return half * half * base;
+}
+
+func int gcd(int a, int b) {
+    if (b == 0) { return a; }
+    return gcd(b, a % b);
+}
+
+print("2^30     =", power(2, 30));
+print("gcd      =", gcd(1071, 462));
+
+// ---- Integración numérica (regla del trapecio) de x^2 entre 0 y 3 ----
+func float integrate(float from, float to, int steps = 1000) {
+    float h = (to - from) / steps;
+    float total = 0.0;
+    for (int i = 0; i < steps; i = i + 1) {
+        float x0 = from + i * h;
+        float x1 = x0 + h;
+        total = total + (x0 * x0 + x1 * x1) * h / 2;
+    }
+    return total;
+}
+
+float area = integrate(0.0, 3.0);
+print("integral =", area);
+print("close to 9:", area > 8.99 && area < 9.01);
+print("coarse   =", integrate(0.0, 3.0, steps = 3));
+
+// ---- Clasificación con switch y manejo de errores ----
+func string classify(float value) {
+    int bucket = 0;
+    if (value >= 5) { bucket = 2; } else if (value >= 3) { bucket = 1; }
+    switch (bucket) {
+        case 0: { return "low"; }
+        case 1: { return "medium"; }
+        default: { return "high"; }
+    }
+}
+
+string labels = "";
+for (int i = 0; i < len(data); i = i + 1) {
+    labels = labels + classify(data[i]) + " ";
+}
+print(labels);
+
+vector<float> empty = [];
+try {
+    print(mean(empty));
+} catch (e) {
+    print("error:", e);
+}

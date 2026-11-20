@@ -74,7 +74,30 @@ static void not_supported(int line, const char *what) {
  * int y bool como enteros, float como los bits IEEE 754 del double y
  * string como la dirección de sus bytes (terminados en 0). */
 static int is_scalar(Type t) {
-    return t.kind == TY_INT || t.kind == TY_BOOL || t.kind == TY_FLOAT || t.kind == TY_STRING;
+    return t.kind == TY_INT || t.kind == TY_BOOL || t.kind == TY_FLOAT || t.kind == TY_STRING
+        || t.kind == TY_VECTOR || t.kind == TY_MATRIX || t.kind == TY_EMPTY;
+}
+
+/* Clase de los elementos de un arreglo para las rutinas de runtime_arrays.c.
+ * [] no tiene tipo de elemento: se trata como de enteros, como antes. */
+static int kind_of(TypeKind elem) {
+    switch (elem) {
+        case TY_FLOAT:  return KIND_FLOAT;
+        case TY_BOOL:   return KIND_BOOL;
+        case TY_STRING: return KIND_STRING;
+        default:        return KIND_INT;
+    }
+}
+
+/* Operación aritmética de Vortex -> operación de runtime_arrays.c */
+static int arr_op(int op) {
+    switch (op) {
+        case OP_ADD: return ARR_ADD;
+        case OP_SUB: return ARR_SUB;
+        case OP_MUL: return ARR_MUL;
+        case OP_DIV: return ARR_DIV;
+        default:     return ARR_MOD;
+    }
 }
 
 /* Bytes de un literal de cadena. El lexema conserva las comillas y las
@@ -280,7 +303,21 @@ static void gen_conv(Node *e, Type to) {
     if (e->type.kind == TY_INT && to.kind == TY_FLOAT) {
         x_cvtsi2sd(&a, XMM0, RAX);
         x_movq_rx(&a, RAX, XMM0);
+    } else if ((e->type.kind == TY_VECTOR || e->type.kind == TY_MATRIX) &&
+               e->type.elem == TY_INT && to.elem == TY_FLOAT) {
+        x_call(&a, rt.arr_to_float);    /* vector<int> -> vector<float>: arreglo nuevo */
     }
+}
+
+/* Como gen_conv, para un valor que se guarda (variable, argumento,
+ * return). Los arreglos se guardan por valor: si el origen es una
+ * variable, se copia para que el destino no comparta memoria con ella.
+ * (Las demás expresiones ya producen un arreglo nuevo.) */
+static void gen_store(Node *e, Type to) {
+    int converts = e->type.elem == TY_INT && to.elem == TY_FLOAT;
+    gen_conv(e, to);
+    if (e->kind == N_VAR && (e->type.kind == TY_VECTOR || e->type.kind == TY_MATRIX) && !converts)
+        x_call(&a, rt.arr_copy);
 }
 
 /* Calcula e y la convierte en cadena, para la concatenación con +:
@@ -386,12 +423,208 @@ static void gen_logic(Node *n) {
     asm_bind(&a, fin);
 }
 
+/* Operación con al menos un arreglo (como gen_array_arith y vx_arr_eq de
+ * la versión anterior). Los operandos se calculan de izquierda a derecha.
+ *   arreglo (op) arreglo:  rax = a, rcx = b               -> arr_arr
+ *   arreglo (op) escalar:  rax = arreglo, rcx = escalar,
+ *                          r8 = 1 si el escalar va a la izquierda -> arr_scalar
+ *   == y !=:               rax = a, rcx = b en su tipo común -> arr_eq
+ * Si el resultado es [] (operar con el literal vacío), es [] sin calcular
+ * los operandos, como antes. */
+static void gen_array_binary(Node *n) {
+    Node *l = n->a, *r = n->b;
+    Type result = n->type;
+
+    if (n->op == OP_EQ || n->op == OP_NE) {
+        Type common = unify(l->type, r->type);
+        gen_conv(l, common);
+        x_push(&a, RAX);
+        gen_conv(r, common);
+        x_mov_rr(&a, RCX, RAX);
+        x_pop(&a, RAX);
+        x_mov_ri(&a, RSI, kind_of(common.elem));
+        x_call(&a, rt.arr_eq);
+        if (n->op == OP_NE) {
+            x_mov_ri(&a, RCX, 1);
+            x_xor_rr(&a, RAX, RCX);
+        }
+        return;
+    }
+    if (result.kind == TY_EMPTY) {
+        x_mov_ri(&a, RDI, 0);
+        x_mov_ri(&a, RSI, (uint64_t)-1);
+        x_call(&a, rt.arr_new);
+        return;
+    }
+    if (is_array(l->type) && is_array(r->type)) {
+        gen_conv(l, result);
+        x_push(&a, RAX);
+        gen_conv(r, result);
+        x_mov_rr(&a, RCX, RAX);
+        x_pop(&a, RAX);
+        x_mov_ri(&a, RDI, arr_op(n->op));
+        x_mov_ri(&a, RSI, kind_of(result.elem));
+        x_mov_ri(&a, RDX, n->line);
+        x_call(&a, rt.arr_arr);
+    } else {
+        int scalar_left = !is_array(l->type);
+        Type elem = type_of(result.elem, TY_ERROR);
+        gen_conv(l, scalar_left ? elem : result);
+        x_push(&a, RAX);
+        gen_conv(r, scalar_left ? result : elem);
+        if (scalar_left) {
+            x_pop(&a, RCX);                     /* rcx = escalar, rax = arreglo */
+        } else {
+            x_mov_rr(&a, RCX, RAX);
+            x_pop(&a, RAX);
+        }
+        x_mov_ri(&a, RDI, arr_op(n->op));
+        x_mov_ri(&a, RSI, kind_of(result.elem));
+        x_mov_ri(&a, RDX, n->line);
+        x_mov_ri(&a, R8, scalar_left);
+        x_call(&a, rt.arr_scalar);
+    }
+}
+
+/* Literal de arreglo.
+ *   []:          arr_new(0, -1)
+ *   vector:      calcular y apilar cada elemento (convertido al tipo de
+ *                los elementos); arr_new(n, -1); copiar los valores desde
+ *                la pila: el elemento k está en [rsp + 8 * (n - 1 - k)]
+ *   matriz:      calcular y apilar cada fila; mat_from_rows revisa que
+ *                midan lo mismo y las copia */
+static void gen_array_literal(Node *n) {
+    Type t = n->type;
+    Node *e;
+    int count = 0, k;
+
+    if (t.kind == TY_EMPTY || n->a == NULL) {
+        x_mov_ri(&a, RDI, 0);
+        x_mov_ri(&a, RSI, (uint64_t)-1);
+        x_call(&a, rt.arr_new);
+        return;
+    }
+    if (t.kind == TY_VECTOR) {
+        Type elem = type_of(t.elem, TY_ERROR);
+        for (e = n->a; e != NULL; e = e->next) {
+            gen_conv(e, elem);
+            x_push(&a, RAX);
+            count++;
+        }
+        x_mov_ri(&a, RDI, count);
+        x_mov_ri(&a, RSI, (uint64_t)-1);
+        x_call(&a, rt.arr_new);
+        for (k = 0; k < count; k++) {
+            x_load(&a, RCX, RSP, 8 * (count - 1 - k));
+            x_store(&a, RAX, 16 + 8 * k, RCX);
+        }
+    } else {
+        Type row = type_of(TY_VECTOR, t.elem);
+        for (e = n->a; e != NULL; e = e->next) {
+            gen_conv(e, row);
+            x_push(&a, RAX);
+            count++;
+        }
+        x_mov_ri(&a, RDI, count);
+        x_mov_ri(&a, RDX, n->line);
+        x_call(&a, rt.mat_from_rows);
+    }
+    x_add_ri(&a, RSP, 8 * count);
+}
+
+/* Lectura de v[i] (un elemento) o m[i] (copia de la fila, como vx_row).
+ * m[i][j] es (m[i])[j]: primero la fila y después su elemento, así que
+ * un j fuera de rango se reporta como índice de un vector, igual que antes.
+ *           <base>
+ *           push rax
+ *           <índice>
+ *           mov rcx, rax
+ *           pop rax
+ *           mov rdx, línea
+ *           mov rsi, "nombre del tipo"
+ *           call vec_get / mat_row */
+static void gen_index(Node *n) {
+    Type base = n->a->type;
+    gen_expr(n->a);
+    x_push(&a, RAX);
+    gen_expr(n->b);
+    x_mov_rr(&a, RCX, RAX);
+    x_pop(&a, RAX);
+    x_mov_ri(&a, RDX, n->line);
+    x_mov_ri(&a, RSI, rt_literal(&a, type_name(base), (int)strlen(type_name(base))));
+    x_call(&a, base.kind == TY_MATRIX ? rt.mat_row : rt.vec_get);
+}
+
+/* Asignación a un elemento: v[i] = x, m[i] = fila o m[i][j] = x. El
+ * destino es siempre una variable (semantic.c lo verifica). Se calculan
+ * los índices y el valor de izquierda a derecha y se apilan; después se
+ * obtiene la dirección con la rutina que verifica los índices. */
+static void gen_assign_element(Node *n) {
+    Node *target = n->a;
+    const char *tname;
+
+    if (target->a->kind == N_VAR && target->a->type.kind == TY_VECTOR) {
+        /* v[i] = x:  vec_addr(v, i) y guardar */
+        tname = type_name(target->a->type);
+        gen_expr(target->b);
+        x_push(&a, RAX);
+        gen_conv(n->b, target->type);
+        x_push(&a, RAX);
+        load_var(target->a->sym);
+        x_load(&a, RCX, RSP, 8);
+        x_mov_ri(&a, RDX, n->line);
+        x_mov_ri(&a, RSI, rt_literal(&a, tname, (int)strlen(tname)));
+        x_call(&a, rt.vec_addr);
+        x_pop(&a, RCX);
+        x_store(&a, RAX, 0, RCX);
+        x_add_ri(&a, RSP, 8);
+    } else if (target->a->kind == N_VAR) {
+        /* m[i] = fila:  mat_set_row(m, i, fila) copia los valores */
+        tname = type_name(target->a->type);
+        gen_expr(target->b);
+        x_push(&a, RAX);
+        gen_conv(n->b, target->type);
+        x_push(&a, RAX);
+        load_var(target->a->sym);
+        x_load(&a, RCX, RSP, 8);
+        x_load(&a, R8, RSP, 0);
+        x_mov_ri(&a, RDX, n->line);
+        x_mov_ri(&a, RSI, rt_literal(&a, tname, (int)strlen(tname)));
+        x_call(&a, rt.mat_set_row);
+        x_add_ri(&a, RSP, 16);
+    } else {
+        /* m[i][j] = x:  mat_addr2(m, i, j) y guardar */
+        Node *matrix = target->a->a;
+        tname = type_name(matrix->type);
+        gen_expr(target->a->b);
+        x_push(&a, RAX);
+        gen_expr(target->b);
+        x_push(&a, RAX);
+        gen_conv(n->b, target->type);
+        x_push(&a, RAX);
+        load_var(matrix->sym);
+        x_load(&a, RCX, RSP, 16);
+        x_load(&a, R8, RSP, 8);
+        x_mov_ri(&a, RDX, n->line);
+        x_mov_ri(&a, RSI, rt_literal(&a, tname, (int)strlen(tname)));
+        x_call(&a, rt.mat_addr2);
+        x_pop(&a, RCX);
+        x_store(&a, RAX, 0, RCX);
+        x_add_ri(&a, RSP, 16);
+    }
+}
+
 static void gen_binary(Node *n) {
     if (!is_scalar(n->a->type) || !is_scalar(n->b->type)) {
         not_supported(n->line, "an operation on this type");
         return;
     }
     if (n->op == OP_AND || n->op == OP_OR) { gen_logic(n); return; }
+
+    if (is_array(n->a->type) || is_array(n->b->type)) {
+        gen_array_binary(n);
+        return;
+    }
 
     /* Concatenación: el resultado es string si alguno de los operandos
      * lo es; el otro se convierte a cadena.
@@ -511,7 +744,7 @@ static void gen_call(Node *n) {
 
     for (b = n->b; b != NULL; b = b->next) {
         if (!is_scalar(b->type)) { not_supported(n->line, "a parameter of this type"); return; }
-        gen_conv(b->a, b->type);            /* int -> float si el parámetro es float */
+        gen_store(b->a, b->type);           /* promoción y copia de arreglos */
         x_push(&a, RAX);
         count++;
     }
@@ -558,8 +791,15 @@ static void gen_expr(Node *n) {
             load_var(n->sym);
             break;
         case N_UNARY:
+            if (n->type.kind == TY_EMPTY) {     /* -[] es [] */
+                gen_array_literal(n);
+                break;
+            }
             gen_expr(n->a);
-            if (n->op == OP_NEG && n->type.kind == TY_FLOAT) {
+            if (n->op == OP_NEG && is_array(n->type)) {
+                x_mov_ri(&a, RSI, kind_of(n->type.elem));
+                x_call(&a, rt.arr_neg);
+            } else if (n->op == OP_NEG && n->type.kind == TY_FLOAT) {
                 x_mov_ri(&a, RCX, 0x8000000000000000ULL);  /* invertir el bit de signo */
                 x_xor_rr(&a, RAX, RCX);
             } else if (n->op == OP_NEG) {
@@ -573,15 +813,25 @@ static void gen_expr(Node *n) {
             gen_binary(n);
             break;
         case N_CALL:   gen_call(n); break;
-        case N_INDEX:  not_supported(n->line, "indexing"); break;
+        case N_INDEX:  gen_index(n); break;
+        case N_ARRAY:  gen_array_literal(n); break;
         case N_REDUCE:
             if (n->op == OP_LEN && n->a->type.kind == TY_STRING) {
                 gen_expr(n->a);                 /* len(cadena) = strlen */
                 x_mov_rr(&a, RSI, RAX);
                 x_call(&a, rt.strlen);
                 x_mov_rr(&a, RAX, RDX);
+            } else if (n->op == OP_LEN) {
+                gen_expr(n->a);                 /* len(arreglo) = n: elementos o filas */
+                x_load(&a, RAX, RAX, 0);
             } else {
-                not_supported(n->line, "a reduction on an array");
+                /* sum, prod, max y min sobre todos los elementos */
+                gen_expr(n->a);
+                x_mov_ri(&a, RDI, n->op == OP_SUM ? RED_SUM : n->op == OP_PROD ? RED_PROD
+                                : n->op == OP_MAX ? RED_MAX : RED_MIN);
+                x_mov_ri(&a, RSI, kind_of(n->type.kind));
+                x_mov_ri(&a, RDX, n->line);
+                x_call(&a, rt.reduce);
             }
             break;
         default:       not_supported(n->line, "this expression"); break;
@@ -607,6 +857,11 @@ static void gen_print(Node *n) {
     for (e = n->a, k = 0; e != NULL; e = e->next, k++) {
         if (k > 0) rt_print_text(&a, &rt, " ");
         x_load(&a, RAX, RSP, 8 * (count - 1 - k));
+        if (is_array(e->type)) {
+            x_mov_ri(&a, RSI, kind_of(e->type.elem));
+            x_call(&a, rt.print_arr);
+            continue;
+        }
         x_call(&a, e->type.kind == TY_BOOL ? rt.print_bool
                  : e->type.kind == TY_FLOAT ? rt.print_float
                  : e->type.kind == TY_STRING ? rt.print_str : rt.print_int);
@@ -894,12 +1149,12 @@ static void gen_stmt(Node *n) {
     switch (n->kind) {
         case N_VARDECL:
             if (!is_scalar(n->type)) { not_supported(n->line, type_name(n->type)); break; }
-            gen_conv(n->a, n->type);
+            gen_store(n->a, n->type);
             store_var(n->sym);
             break;
         case N_ASSIGN:
-            if (n->a->kind != N_VAR) { not_supported(n->line, "assignment to an element"); break; }
-            gen_conv(n->b, n->a->type);
+            if (n->a->kind != N_VAR) { gen_assign_element(n); break; }
+            gen_store(n->b, n->a->type);
             store_var(n->a->sym);
             break;
         case N_EXPRSTMT:
@@ -936,7 +1191,7 @@ static void gen_stmt(Node *n) {
             break;
         case N_RETURN:
             /* el valor se calcula todavía dentro de los try abiertos */
-            if (n->a != NULL) gen_conv(n->a, n->type);  /* n->type: tipo de retorno */
+            if (n->a != NULL) gen_store(n->a, n->type); /* n->type: tipo de retorno */
             leave_tries(try_depth);
             gen_epilogue();
             break;
