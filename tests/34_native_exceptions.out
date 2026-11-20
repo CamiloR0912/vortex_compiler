@@ -1,0 +1,26 @@
+before the error
+caught: division by zero (line 10)
+caught: division by zero (line 17)
+4.0
+caught: assertion failed: x must be non-negative, got -4.0 (line 27)
+caught: assertion failed (line 37)
+a message
+421
+2.5
+false
+inner caught: inner problem
+outer caught: rethrown -> inner problem
+  100 / -2 = -50
+  skip 2 -> division by zero (line 65)
+  100 / 1 = 100
+ok: 2
+after the loop: division by zero (line 77)
+5 -1 3
+after return in try: division by zero (line 92)
+caught: maximum recursion depth (1000) exceeded in 'forever' (line 98)
+fact(6) after recovering = 720
+inner e
+outer e
+print failed: division by zero (line 117)
+age ok: 20
+[Uncaught exception] line 124: invalid age: -5

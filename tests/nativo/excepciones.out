@@ -1,0 +1,5 @@
+capturado: division by zero (line 10)
+true
+lanzado
+[Uncaught exception] line 30: sin manejador
+exit code: 1

@@ -1,0 +1,140 @@
+// Backend nativo, etapa 4: funciones.
+// La salida esperada (31_native_functions.out) es la que produce la
+// versión anterior del compilador, que traducía a C y usaba gcc.
+
+// ---- Recursión ----
+func int fact(int n) {
+    if (n <= 1) { return 1; }
+    return n * fact(n - 1);
+}
+print(fact(10), fact(20));                  // 3628800 2432902008176640000
+
+func int fib(int n) {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+print(fib(0), fib(1), fib(10), fib(20));    // 0 1 55 6765
+
+// ---- Recursión mutua: is_even llama a is_odd, que se define después ----
+func bool is_even(int n) { if (n == 0) { return true; } return is_odd(n - 1); }
+func bool is_odd(int n)  { if (n == 0) { return false; } return is_even(n - 1); }
+print(is_odd(7), is_even(7), is_even(10));  // true false true
+
+// ---- Llamada anterior a la definición ----
+print(cube(3));                             // 27
+func int cube(int x) { return x * x * x; }
+
+// ---- Parámetros posicionales, nombrados y por defecto ----
+func int linear(int x, int m = 2, int b = 1) { return m * x + b; }
+print(linear(5), linear(5, 3), linear(5, b = 10), linear(b = 0, x = 4, m = 5));
+
+// el valor por defecto se calcula en cada llamada
+int base = 100;
+func int offset(int x, int d = base) { return x + d; }
+print(offset(1), offset(1, 2));             // 101 3
+base = 200;
+print(offset(1));                           // 201
+
+// ---- Sobrecarga por tipo y cantidad de parámetros ----
+func int pick(int x)        { return 1; }
+func int pick(bool x)       { return 2; }
+func int pick(int x, int y) { return 3; }
+print(pick(7), pick(true), pick(1, 2));     // 1 2 3
+
+// ---- Funciones anidadas: la interna ve y modifica variables de la externa ----
+func int sum_of_squares(int n) {
+    int calls = 0;
+    func int square(int x) {
+        calls = calls + 1;
+        return x * x;
+    }
+    int total = 0;
+    for (int i = 1; i <= n; i = i + 1) { total = total + square(i); }
+    print(calls);                           // 4
+    return total;
+}
+print(sum_of_squares(4));                   // 30
+
+// función anidada recursiva
+func int digits(int n) {
+    func int count(int m) {
+        if (m < 10) { return 1; }
+        return 1 + count(m / 10);
+    }
+    return count(n);
+}
+print(digits(98765));                       // 5
+
+// tres niveles: la función más interna usa y modifica variables de las
+// dos que la contienen y del programa
+int global = 0;
+func int outer(int p) {
+    int mid = 10;
+    func int middle(int q) {
+        func int inner(int r) {
+            global = global + 1;
+            mid = mid + r;
+            return p + q + r;
+        }
+        return inner(q * 2);
+    }
+    int result = middle(p + 1);
+    print(mid);                             // 14
+    return result;
+}
+print(outer(1), global);                    // 7 1
+
+// ---- void, return temprano y shadowing de parámetros ----
+int x = 100;
+func void show(int x) {                     // el parámetro x oculta la x global
+    if (x < 0) { print(-1); return; }
+    print(x);
+}
+show(5);
+show(-3);
+print(x);                                   // 100
+
+// ---- return dentro de ciclos anidados ----
+func int first_divisor(int k) {
+    for (int d = 2; d < k; d = d + 1) {
+        while (true) {
+            if (k % d == 0) { return d; }
+            break;
+        }
+    }
+    return k;
+}
+print(first_divisor(91), first_divisor(13)); // 7 13
+
+// ---- Orden de evaluación ----
+int counter = 0;
+func int tick() {
+    counter = counter + 1;
+    return counter;
+}
+// el valor de un switch se calcula una sola vez
+switch (tick()) {
+    case 5:  { print(5); }
+    case 1:  { print(1); }
+    default: { print(0); }
+}
+print(counter);                             // 1
+// print calcula sus valores de izquierda a derecha antes de imprimir
+print(tick(), tick(), counter);             // 2 3 3
+// cortocircuito: tick() no se llama
+print(false && tick() > 0, counter);        // false 3
+// una llamada como sentencia descarta su valor
+tick();
+print(counter);                             // 4
+
+// llamadas como argumentos de otras llamadas
+func int add(int p, int q) { return p + q; }
+print(add(add(1, 2), add(3, add(4, 5))));   // 15
+
+// ---- Límite de recursión: con 1000 llamadas en curso todavía funciona
+//      (12_recursion_limit.vx prueba el caso que lo supera) ----
+func int depth(int n) {
+    if (n == 0) { return 0; }
+    return 1 + depth(n - 1);
+}
+print(depth(999));                          // 999: depth(999) ... depth(0) son 1000 llamadas

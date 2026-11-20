@@ -1,3 +1,11 @@
+#!/bin/bash
+# Construye vortexc: genera el analizador sintáctico (Bison) y el léxico
+# (Flex) y compila el compilador. No ejecuta pruebas; para eso:
+#   bash tests/nativo/run.sh     pruebas del backend nativo
+#   bash tests/run_tests.sh      programas Vortex
+cd "$(dirname "$0")" || exit 1
+set -e
 bison -d -v parser.y
 flex lexer.l
-gcc -o vortexc main.c ast.c semantic.c codegen.c lex.yy.c parser.tab.c
+gcc -o vortexc main.c ast.c semantic.c lex.yy.c parser.tab.c x86gen.c runtime.c runtime_arrays.c x86enc.c elf.c
+echo "vortexc construido."
