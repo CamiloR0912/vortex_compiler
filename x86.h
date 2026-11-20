@@ -134,6 +134,7 @@ void x_cqo(Asm *a);                                     /* cqo                  
 void x_idiv(Asm *a, Reg r);                             /* idiv r                 */
 void x_div(Asm *a, Reg r);                              /* div r (sin signo)      */
 void x_store8(Asm *a, Reg base, int32_t disp, Reg src); /* mov byte [base+disp], src8 */
+void x_load8(Asm *a, Reg dst, Reg base, int32_t disp);  /* movzx dst, byte [base+disp] */
 void x_rep_movsb(Asm *a);                               /* rep movsb              */
 void x_and_rr(Asm *a, Reg dst, Reg src);                /* and dst, src           */
 void x_or_rr(Asm *a, Reg dst, Reg src);                 /* or dst, src            */
@@ -159,6 +160,7 @@ int elf_write(const char *path, const Asm *a, int entry);
 
 /* Números de las llamadas al sistema de Linux x86-64 que usa el compilador */
 #define SYS_WRITE  1
+#define SYS_MMAP   9
 #define SYS_EXIT   60
 
 #endif

@@ -346,6 +346,15 @@ void x_store8(Asm *a, Reg base, int32_t disp, Reg src) {
     modrm_mem(a, src, base, disp);
 }
 
+/* movzx dst, byte [base + disp]: REX.W 0F B6 /r
+ * Lee un byte de memoria y lo deja en dst rellenando con ceros. */
+void x_load8(Asm *a, Reg dst, Reg base, int32_t disp) {
+    rex(a, 1, dst, base);
+    buf_byte(&a->code, 0x0F);
+    buf_byte(&a->code, 0xB6);
+    modrm_mem(a, dst, base, disp);
+}
+
 /* rep movsb: F3 A4
  * Copia rcx bytes desde la dirección rsi a la dirección rdi; al terminar,
  * rsi y rdi quedan después del bloque copiado y rcx en 0. */
