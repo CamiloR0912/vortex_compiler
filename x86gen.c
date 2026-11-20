@@ -68,9 +68,10 @@ static void not_supported(int line, const char *what) {
     unsupported++;
 }
 
-/* ¿El tipo se representa como un entero de 64 bits en esta etapa? */
+/* ¿El tipo ya lo genera esta etapa? Todos viajan en rax como 64 bits:
+ * int y bool como enteros, float como los bits IEEE 754 del double. */
 static int is_scalar(Type t) {
-    return t.kind == TY_INT || t.kind == TY_BOOL;
+    return t.kind == TY_INT || t.kind == TY_BOOL || t.kind == TY_FLOAT;
 }
 
 static SymInfo *sym_info(Symbol *s) {
@@ -233,6 +234,68 @@ static void set_bool(Cond cc) {
     x_movzx_rax_al(&a);
 }
 
+/* Calcula e y, si hace falta, la promueve al tipo to. La única promoción
+ * entre valores simples es int -> float:
+ *           cvtsi2sd xmm0, rax
+ *           movq rax, xmm0 */
+static void gen_conv(Node *e, Type to) {
+    gen_expr(e);
+    if (e->type.kind == TY_INT && to.kind == TY_FLOAT) {
+        x_cvtsi2sd(&a, XMM0, RAX);
+        x_movq_rx(&a, RAX, XMM0);
+    }
+}
+
+/* Operación entre dos float: rax = izquierdo, rcx = derecho (bits).
+ *           movq xmm0, rax
+ *           movq xmm1, rcx
+ *           addsd / subsd / mulsd / divsd xmm0, xmm1
+ *           movq rax, xmm0
+ * Dividir entre 0.0 (o -0.0) es un error de ejecución, como en la versión
+ * anterior; ucomisd con 0.0 da ZF = 1 también si el divisor es NaN, por
+ * eso además se revisa la paridad.
+ * Comparaciones con ucomisd, con la semántica de C ante un NaN (todas
+ * falsas salvo !=):
+ *   a > b:  ucomisd a, b; seta        a >= b: ucomisd a, b; setae
+ *   a < b:  ucomisd b, a; seta        a <= b: ucomisd b, a; setae
+ *   a == b: ZF = 1 y PF = 0           a != b: ZF = 0 o PF = 1 */
+static void gen_float_op(Node *n) {
+    x_movq_xr(&a, XMM0, RAX);
+    x_movq_xr(&a, XMM1, RCX);
+    switch (n->op) {
+        case OP_ADD: x_addsd(&a, XMM0, XMM1); break;
+        case OP_SUB: x_subsd(&a, XMM0, XMM1); break;
+        case OP_MUL: x_mulsd(&a, XMM0, XMM1); break;
+        case OP_DIV: {
+            Label ok = asm_label(&a);
+            x_mov_ri(&a, RDX, 0);
+            x_movq_xr(&a, XMM2, RDX);
+            x_ucomisd(&a, XMM1, XMM2);
+            x_jcc(&a, CC_NE, ok);
+            x_jcc(&a, CC_P, ok);
+            rt_fail(&a, &rt, n->line, "division by zero");
+            asm_bind(&a, ok);
+            x_divsd(&a, XMM0, XMM1);
+            break;
+        }
+        case OP_GT: x_ucomisd(&a, XMM0, XMM1); set_bool(CC_A);  return;
+        case OP_GE: x_ucomisd(&a, XMM0, XMM1); set_bool(CC_AE); return;
+        case OP_LT: x_ucomisd(&a, XMM1, XMM0); set_bool(CC_A);  return;
+        case OP_LE: x_ucomisd(&a, XMM1, XMM0); set_bool(CC_AE); return;
+        case OP_EQ:
+        case OP_NE:
+            x_ucomisd(&a, XMM0, XMM1);
+            set_bool(n->op == OP_EQ ? CC_E : CC_NE);
+            x_mov_rr(&a, RDX, RAX);             /* mov no cambia las banderas */
+            set_bool(n->op == OP_EQ ? CC_NP : CC_P);
+            if (n->op == OP_EQ) x_and_rr(&a, RAX, RDX);
+            else x_or_rr(&a, RAX, RDX);
+            return;
+        default: break;
+    }
+    x_movq_rx(&a, RAX, XMM0);
+}
+
 /* División y residuo enteros: rax = izq, rcx = der.
  *   - Divisor cero: error de ejecución.
  *   - Divisor -1: idiv fallaría con el entero más negativo (su negado no
@@ -280,6 +343,18 @@ static void gen_binary(Node *n) {
         return;
     }
     if (n->op == OP_AND || n->op == OP_OR) { gen_logic(n); return; }
+
+    /* Si interviene un float, los dos operandos se promueven a float */
+    if (n->a->type.kind == TY_FLOAT || n->b->type.kind == TY_FLOAT) {
+        Type f = type_of(TY_FLOAT, TY_ERROR);
+        gen_conv(n->a, f);
+        x_push(&a, RAX);
+        gen_conv(n->b, f);
+        x_mov_rr(&a, RCX, RAX);
+        x_pop(&a, RAX);
+        gen_float_op(n);
+        return;
+    }
 
     gen_expr(n->a);
     x_push(&a, RAX);
@@ -357,7 +432,7 @@ static void gen_call(Node *n) {
 
     for (b = n->b; b != NULL; b = b->next) {
         if (!is_scalar(b->type)) { not_supported(n->line, "a parameter of this type"); return; }
-        gen_expr(b->a);
+        gen_conv(b->a, b->type);            /* int -> float si el parámetro es float */
         x_push(&a, RAX);
         count++;
     }
@@ -386,12 +461,22 @@ static void gen_expr(Node *n) {
         case N_BOOL:
             x_mov_ri(&a, RAX, strcmp(n->text, "true") == 0);
             break;
+        case N_FLOAT: {                         /* los bits del double, calculados por strtod */
+            double v = strtod(n->text, NULL);
+            uint64_t bits;
+            memcpy(&bits, &v, sizeof bits);
+            x_mov_ri(&a, RAX, bits);
+            break;
+        }
         case N_VAR:
             load_var(n->sym);
             break;
         case N_UNARY:
             gen_expr(n->a);
-            if (n->op == OP_NEG) {
+            if (n->op == OP_NEG && n->type.kind == TY_FLOAT) {
+                x_mov_ri(&a, RCX, 0x8000000000000000ULL);  /* invertir el bit de signo */
+                x_xor_rr(&a, RAX, RCX);
+            } else if (n->op == OP_NEG) {
                 x_neg(&a, RAX);
             } else {                            /* OP_NOT: rax = (rax == 0) */
                 x_test_rr(&a, RAX, RAX);
@@ -427,7 +512,8 @@ static void gen_print(Node *n) {
     for (e = n->a, k = 0; e != NULL; e = e->next, k++) {
         if (k > 0) rt_print_text(&a, &rt, " ");
         x_load(&a, RAX, RSP, 8 * (count - 1 - k));
-        x_call(&a, e->type.kind == TY_BOOL ? rt.print_bool : rt.print_int);
+        x_call(&a, e->type.kind == TY_BOOL ? rt.print_bool
+                 : e->type.kind == TY_FLOAT ? rt.print_float : rt.print_int);
     }
     rt_print_text(&a, &rt, "\n");
     if (count > 0) x_add_ri(&a, RSP, 8 * count);
@@ -567,10 +653,25 @@ static void gen_switch(Node *n) {
     for (c = n->b; c != NULL; c = c->next) {
         Label siguiente = asm_label(&a);
         if (c->a != NULL) {                 /* case; NULL es default */
-            gen_expr(c->a);
+            /* Se compara en el tipo común: un case float en un switch
+             * int promueve el valor del switch, como en la versión anterior */
+            Type common = unify(n->a->type, c->a->type);
+            gen_conv(c->a, common);
             x_load(&a, RCX, RBP, t);
-            x_cmp_rr(&a, RCX, RAX);
-            x_jcc(&a, CC_NE, siguiente);
+            if (common.kind == TY_FLOAT) {
+                if (n->a->type.kind == TY_INT) {
+                    x_cvtsi2sd(&a, XMM0, RCX);
+                } else {
+                    x_movq_xr(&a, XMM0, RCX);
+                }
+                x_movq_xr(&a, XMM1, RAX);
+                x_ucomisd(&a, XMM0, XMM1);
+                x_jcc(&a, CC_NE, siguiente);
+                x_jcc(&a, CC_P, siguiente);     /* NaN: no es igual a nada */
+            } else {
+                x_cmp_rr(&a, RCX, RAX);
+                x_jcc(&a, CC_NE, siguiente);
+            }
         }
         gen_stmt(c->b);
         x_jmp(&a, fin);
@@ -583,12 +684,12 @@ static void gen_stmt(Node *n) {
     switch (n->kind) {
         case N_VARDECL:
             if (!is_scalar(n->type)) { not_supported(n->line, type_name(n->type)); break; }
-            gen_expr(n->a);
+            gen_conv(n->a, n->type);
             store_var(n->sym);
             break;
         case N_ASSIGN:
             if (n->a->kind != N_VAR) { not_supported(n->line, "assignment to an element"); break; }
-            gen_expr(n->b);
+            gen_conv(n->b, n->a->type);
             store_var(n->a->sym);
             break;
         case N_EXPRSTMT:
@@ -622,7 +723,7 @@ static void gen_stmt(Node *n) {
             defer_func(n);
             break;
         case N_RETURN:
-            if (n->a != NULL) gen_expr(n->a);
+            if (n->a != NULL) gen_conv(n->a, n->type);  /* n->type: tipo de retorno */
             gen_epilogue();
             break;
         case N_TRY:      not_supported(n->line, "'try'"); break;

@@ -1,0 +1,74 @@
+// Backend nativo, etapa 5: números reales (float).
+// La salida esperada (32_native_floats.out) es la que produce la versión
+// anterior del compilador, que traducía a C y usaba gcc.
+
+// ---- Literales e impresión ----
+float pi = 3.14159;
+print(pi, 2 * pi, 0.5, 100.0, 1.0 / 3.0);
+print(0.1 + 0.2, 0.00001 * 1.0, 123456789.123, 25000000000.0 * 4);
+
+// ---- Aritmética y promoción int -> float ----
+int a = 7;
+print(a / 2, a / 2.0, a * 1.5, a - 0.25);   // 3 3.5 10.5 6.75
+float f = 5;                                // declaración: 5 se promueve
+print(f);                                   // 5.0
+f = a;                                      // asignación
+print(f + 1);                               // 8.0
+print(-pi, -(-2.5), - 0.0);
+
+// ---- Comparaciones, incluidas las mixtas ----
+print(a > 6.5, a < 6.5, a == 7.0, 2.0 <= 2, 3.0 >= 3.5, 1.5 != 1.5);
+print(0.1 + 0.2 == 0.3, 0.1 + 0.2 > 0.3);   // false true
+
+// ---- inf, -inf, nan y -0.0 ----
+// (la gramática no tiene literales con exponente: se llega a inf multiplicando)
+float big = 1.0;
+for (int i = 0; i < 300; i = i + 1) { big = big * 10; }
+float inf = big * big;
+float nan = inf - inf;
+print(inf, -inf, nan);
+print(nan == nan, nan != nan, nan < 1.0, nan > 1.0, nan <= nan); // false true false false false
+print(inf > big, -inf < -big);
+float zero = 0.0;
+float negzero = -zero;
+print(negzero, negzero == zero);            // -0.0 true
+
+// ---- Funciones: parámetros y retorno float, promoción en llamadas ----
+func float average(float x, float y) { return (x + y) / 2; }
+print(average(1, 2), average(2.5, 4));      // 1.5 3.25
+
+func float half(int n) { return n / 2.0; }
+func float as_float(int n) { return n; }    // return promueve
+print(half(7), as_float(3));                // 3.5 3.0
+
+func float power(float x, int n) {
+    if (n == 0) { return 1; }
+    return x * power(x, n - 1);
+}
+print(power(1.5, 3), power(2, 10));         // 3.375 1024.0
+
+// Raíz cuadrada por el método de Newton, con función anidada
+func float sqrt(float x) {
+    func float improve(float guess) { return (guess + x / guess) / 2; }
+    if (x == 0) { return 0.0; }
+    float guess = x;
+    for (int i = 0; i < 40; i = i + 1) { guess = improve(guess); }
+    return guess;
+}
+print(sqrt(2), sqrt(144), sqrt(0.25));
+
+// ---- switch con valores reales ----
+switch (2.5) {
+    case 1:   { print(1); }
+    case 2.5: { print(25); }
+}
+int k = 3;
+switch (k) {
+    case 3.0: { print(true); }              // el valor int se compara como float
+    default:  { print(false); }
+}
+
+// ---- División de reales entre cero: error de ejecución ----
+print(1.0 / 3);
+print(pi / zero);
+print(999);
