@@ -25,9 +25,10 @@
  *   ámbitos distintos (shadowing) tienen posiciones distintas sin hacer
  *   nada especial.
  *
- * Alcance de la etapa 2: int, bool, variables, asignación, bloques,
- * aritmética, comparaciones, operadores lógicos y print. Si el programa usa
- * algo más, se reporta como no soportado y no se genera el ejecutable.
+ * Alcance hasta la etapa 3: int, bool, variables, asignación, bloques,
+ * aritmética, comparaciones, operadores lógicos, print, if/else, while,
+ * for, break, continue y switch. Si el programa usa algo más, se reporta
+ * como no soportado y no se genera el ejecutable.
  * ========================================================================== */
 #include <stdlib.h>
 #include <string.h>

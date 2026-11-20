@@ -10,7 +10,7 @@ El compilador se reconstruye por etapas: cada rama contiene solo lo que existe h
 |---|---|---|---|
 | 1 | `etapa-1/ejecutable-minimo` | Codificador de instrucciones y escritor ELF | Terminada |
 | 2 | `etapa-2/enteros-y-print` | Enteros, booleanos, variables, aritmética y `print` | Terminada |
-| 3 | `etapa-3/control-de-flujo` | `if`, `while`, `for`, `switch`, bloques y shadowing | Pendiente |
+| 3 | `etapa-3/control-de-flujo` | `if`, `while`, `for`, `switch`, `break` y `continue` | Terminada |
 | 4 | `etapa-4/funciones` | Funciones, recursión, sobrecarga y funciones anidadas | Pendiente |
 | 5 | `etapa-5/cadenas-y-reales` | `string` y `float` | Pendiente |
 | 6 | `etapa-6/excepciones` | `try`-`catch`, `throw`, `assert` y errores de ejecución | Pendiente |
@@ -162,3 +162,62 @@ La precedencia no aparece en el código: ya está en la forma del árbol (`+(a, 
 | `tests/*` de errores | Las 18 pruebas de errores léxicos, sintácticos y semánticos de `main` |
 
 La salida esperada de `29_native_integers.vx` es la que produce el compilador de `main` (traducción a C y GCC) con el mismo programa. El backend nativo la reproduce byte por byte.
+
+## Etapa 3: control de flujo
+
+Todas las estructuras de control se traducen a comparaciones y saltos hacia etiquetas. Las etiquetas se crean antes de conocer su posición y el relleno posterior de la etapa 1 completa los saltos al final.
+
+| Estructura | Esquema |
+|---|---|
+| `if` / `else if` / `else` | Cada condición se evalúa en `rax`; si es falsa (`test rax, rax` y `je`) salta a la siguiente rama. Al terminar una rama salta al final de la cadena |
+| `while` | Etiqueta de inicio, condición con salto de salida, cuerpo y salto de vuelta al inicio |
+| `for` | Inicialización antes del ciclo; después del cuerpo, el paso y el salto de vuelta. Sin condición es un ciclo infinito |
+| `break`, `continue` | El generador lleva una pila de ciclos abiertos con dos etiquetas cada uno: salida y continuación. En `while`, `continue` vuelve a la condición; en `for` va al paso |
+| `switch` | Cadena de comparaciones sin fall-through, como en la versión anterior. El valor se calcula una vez y se guarda en una posición propia del marco; cada `case` compara su expresión con él. El `switch` no es un ciclo: un `break` dentro de él sale del ciclo que lo contiene |
+
+Código generado para un `for` con `continue` (desensamblado con `objdump`):
+
+```
+for (int i = 0; i < 3; i = i + 1) {
+    if (i == 1) { continue; }
+    print(i);
+}
+```
+
+```
+      mov  eax, 0                   ; int i = 0
+      mov  [rbp-0x8], rax
+ciclo:
+      mov  rax, [rbp-0x8]           ; i < 3
+      push rax
+      mov  eax, 3
+      mov  rcx, rax
+      pop  rax
+      cmp  rax, rcx
+      setl al
+      movzx rax, al
+      test rax, rax
+      je   fin                      ; condición falsa: salir del ciclo
+      ...                           ; i == 1, igual que arriba con sete
+      test rax, rax
+      je   sigue                    ; if falso: saltar su bloque
+      jmp  paso                     ; continue: ir al paso, no a la condición
+sigue:
+      ...                           ; print(i)
+paso:
+      mov  rax, [rbp-0x8]           ; i = i + 1
+      ...
+      jmp  ciclo
+fin:
+```
+
+El programa imprime `0` y `2`: con `i == 1`, `continue` salta al paso y la variable sigue avanzando.
+
+### Pruebas
+
+| Prueba | Qué demuestra |
+|---|---|
+| `tests/02_scopes.vx` | Recuperada de `main`: bloques anidados y shadowing |
+| `tests/30_native_control_flow.vx` | Las tres ramas del `if`, `if` sin `else` y anidados, `while` y `for` anidados, `for` sin paso y sin condición, primos con `while` dentro de `for`, `break` y `continue` en ambos ciclos, y `switch` con expresiones, `default`, `bool`, anidado y con `break` |
+
+`tests/06_control_flow.vx` de `main` imprime cadenas; se recupera en la etapa 5.
