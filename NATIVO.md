@@ -13,7 +13,7 @@ El compilador se reconstruye por etapas: cada rama contiene solo lo que existe h
 | 3 | `etapa-3/control-de-flujo` | `if`, `while`, `for`, `switch`, `break` y `continue` | Terminada |
 | 4 | `etapa-4/funciones` | Funciones, recursión, sobrecarga y funciones anidadas | Terminada |
 | 5 | `etapa-5/cadenas-y-reales` | `string` y `float` | Terminada |
-| 6 | `etapa-6/excepciones` | `try`-`catch`, `throw`, `assert` y errores de ejecución | Pendiente |
+| 6 | `etapa-6/excepciones` | `try`-`catch`, `throw`, `assert` y errores de ejecución | Terminada |
 | 7 | `etapa-7/vectores-y-matrices` | Arreglos, operaciones elemento a elemento y reducciones | Pendiente |
 
 ## Etapa 1: ejecutable mínimo
@@ -357,3 +357,56 @@ La rutina se validó contra `printf` de glibc con 219 870 valores: potencias de 
 | `tests/01_basics`, `04_runtime_error`, `06_control_flow`, `09_functions` | Recuperadas de `main` |
 
 La gramática de Vortex no tiene literales con exponente (`1e308` se lee como `1` seguido del identificador `e308`); `32_native_floats.vx` llega a `inf` multiplicando.
+
+## Etapa 6: excepciones
+
+### Pila de manejadores
+
+En la versión anterior, `try` usaba `setjmp` y un error hacía `longjmp`. Aquí el mecanismo es el mismo, escrito en instrucciones de máquina. Cada `try` activo tiene un manejador de 32 bytes en la bss:
+
+```
+[h + 0]    rsp al entrar al try
+[h + 8]    rbp al entrar al try (marco de la función que contiene el try)
+[h + 16]   dirección del catch (obtenida con lea rdx, [rip + catch])
+[h + 24]   llamadas en curso al entrar al try
+```
+
+`try_top` cuenta los manejadores activos (como antes, a lo sumo 2048).
+
+### raise
+
+Todo error pasa por la rutina `raise` (`runtime.c`), con la clase de excepción, la línea y el mensaje:
+
+| Clase | Origen | Sin `try` activo |
+|---|---|---|
+| `EXC_RUNTIME` | División entre cero, recursión sin fin, función sin `return`… | `[Runtime error] line N: mensaje` |
+| `EXC_ASSERT` | `assert` que falla | `[Assertion error] line N: assertion failed[: mensaje]` |
+| `EXC_THROW` | `throw` | `[Uncaught exception] line N: valor` |
+
+Sin manejador, imprime el error y termina con código 1. Con manejador:
+
+1. Arma el texto para la variable del `catch`: `mensaje (line N)`, o el valor lanzado tal cual si es un `throw`.
+2. Retira el manejador (`try_top -= 1`).
+3. Restaura la profundidad de llamadas, `rsp` y `rbp` a los valores guardados.
+4. Salta a la dirección del `catch` con el texto en `rax`.
+
+Al restaurar `rsp` y `rbp`, el `catch` se ejecuta en el marco de la función que contiene el `try`, aunque el error haya ocurrido varias llamadas más adentro. Los valores que había en la pila (argumentos, temporales de un `print` a medio calcular) se descartan solos.
+
+### Generación
+
+| Construcción | Código generado |
+|---|---|
+| `try { A } catch (e) { B }` | Registrar el manejador; `A`; retirarlo; saltar al final. En el `catch`: guardar `rax` en `e`; `B` |
+| `throw v` | `v` convertido a cadena; `raise` con `EXC_THROW` |
+| `assert(c, m)` | Si `c` es falsa: `"assertion failed: " + m` (el mensaje solo se calcula en ese caso); `raise` con `EXC_ASSERT` |
+| `break`, `continue`, `return` dentro de un `try` | Antes del salto, `try_top -= k`, con `k` = los `try` que quedan atrás. El generador lleva cuántos `try` están abiertos en la función y cuántos había al abrir cada ciclo |
+
+### Pruebas
+
+| Prueba | Qué demuestra |
+|---|---|
+| `tests/nativo/excepciones.c` | Manejadores registrados a mano: captura desde una rutina con valores apilados (`rsp` se restaura), `throw` capturado y sin manejador |
+| `tests/34_native_exceptions.vx` | Errores capturados varias llamadas más adentro, `assert` con y sin mensaje, `throw` de cada tipo, `try` anidados con relanzamiento, `break`, `continue` y `return` dentro de un `try` seguidos de errores que deben llegar al `catch` correcto, recursión sin fin capturada con la profundidad recuperada y un `print` que falla sin imprimirse a medias |
+| `tests/22_uncaught_assert`, `23_uncaught_throw` | Recuperadas de `main` |
+
+`tests/21_exceptions.vx` de `main` también usa vectores; se recupera en la etapa 7.
