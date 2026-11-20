@@ -1,0 +1,65 @@
+// Backend nativo, etapa 5: cadenas (string).
+// La salida esperada (33_native_strings.out) es la que produce la versión
+// anterior del compilador, que traducía a C y usaba gcc.
+
+// ---- Literales y secuencias de escape ----
+print("hola");
+print("comillas: \"dentro\" y barra: \\");
+print("tab:\tfin");
+print("dos\nlineas");
+print("");                                  // línea vacía
+print("a", "", "b");                        // los valores se separan con un espacio
+
+// ---- Concatenación con conversión de cada tipo ----
+string name = "Vortex";
+int n = 42;
+float x = 2.5;
+bool ok = true;
+print("lenguaje " + name);
+print("n = " + n + ", x = " + x + ", ok = " + ok);
+print(n + " es un entero");
+print(1 + 2 + " suma primero, " + 1 + 2);   // "3 suma primero, 12": asocia a la izquierda
+print("negativo: " + (-n) + ", real: " + 1.0 / 3 + ", entero real: " + 5.0);
+string s = "";
+for (int i = 0; i < 5; i = i + 1) { s = s + i; }
+print(s);                                   // 01234
+
+// ---- Comparaciones (orden lexicográfico por bytes) ----
+print("abc" == "abc", "abc" != "abd", "abc" < "abd", "b" > "abc");
+print("ab" < "abc", "" < "a", "Z" < "a", "abc" <= "abc", "abd" >= "abc");
+string t = "Vor" + "tex";
+print(t == name);                           // compara contenido, no direcciones
+
+// ---- len ----
+print(len("hola"), len(""), len(name + name), len("a\nb"));
+
+// ---- switch con cadenas ----
+string op = "mul";
+switch (op) {
+    case "add": { print("2 + 3 =", 2 + 3); }
+    case "mul": { print("2 * 3 =", 2 * 3); }
+    default:    { print("?"); }
+}
+switch ("x" + "y") {
+    case "xy": { print("concatenado"); }
+}
+
+// ---- Cadenas en funciones ----
+func string repeat(string text, int times, string sep = "-") {
+    string result = "";
+    for (int i = 0; i < times; i = i + 1) {
+        if (i > 0) { result = result + sep; }
+        result = result + text;
+    }
+    return result;
+}
+print(repeat("ab", 3), repeat("x", 4, sep = ""), repeat("solo", 1));
+
+func string describe(int v)    { return "int " + v; }
+func string describe(string v) { return "string '" + v + "'"; }
+print(describe(7), describe("hi"));
+
+// una cadena larga: muchas concatenaciones reservan memoria en el heap
+string long = "";
+for (int i = 0; i < 2000; i = i + 1) { long = long + "ab"; }
+print(len(long));                           // 4000

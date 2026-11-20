@@ -69,9 +69,39 @@ static void not_supported(int line, const char *what) {
 }
 
 /* ¿El tipo ya lo genera esta etapa? Todos viajan en rax como 64 bits:
- * int y bool como enteros, float como los bits IEEE 754 del double. */
+ * int y bool como enteros, float como los bits IEEE 754 del double y
+ * string como la dirección de sus bytes (terminados en 0). */
 static int is_scalar(Type t) {
-    return t.kind == TY_INT || t.kind == TY_BOOL || t.kind == TY_FLOAT;
+    return t.kind == TY_INT || t.kind == TY_BOOL || t.kind == TY_FLOAT || t.kind == TY_STRING;
+}
+
+/* Bytes de un literal de cadena. El lexema conserva las comillas y las
+ * secuencias de escape tal como se escribieron; la versión anterior las
+ * copiaba al código C y las interpretaba gcc. Aquí se interpretan las de
+ * C: \n \t \r \0 \\ \" \' \a \b \f \v; en cualquier otra, la barra se
+ * descarta y queda el carácter. */
+static int unescape(const char *lexeme, char *out) {
+    const char *p = lexeme + 1;                 /* sin la comilla inicial */
+    int len = 0;
+    while (*p != '\0' && *(p + 1) != '\0') {    /* hasta la comilla final */
+        char c = *p++;
+        if (c == '\\') {
+            c = *p++;
+            switch (c) {
+                case 'n': c = '\n'; break;
+                case 't': c = '\t'; break;
+                case 'r': c = '\r'; break;
+                case '0': c = '\0'; break;
+                case 'a': c = '\a'; break;
+                case 'b': c = '\b'; break;
+                case 'f': c = '\f'; break;
+                case 'v': c = '\v'; break;
+                default:  break;                /* \\ \" \' y el resto */
+            }
+        }
+        out[len++] = c;
+    }
+    return len;
 }
 
 static SymInfo *sym_info(Symbol *s) {
@@ -246,6 +276,18 @@ static void gen_conv(Node *e, Type to) {
     }
 }
 
+/* Calcula e y la convierte en cadena, para la concatenación con +:
+ * int, float y bool pasan por str_int, str_float y str_bool. */
+static void gen_as_string(Node *e) {
+    gen_expr(e);
+    switch (e->type.kind) {
+        case TY_INT:   x_call(&a, rt.str_int); break;
+        case TY_FLOAT: x_call(&a, rt.str_float); break;
+        case TY_BOOL:  x_call(&a, rt.str_bool); break;
+        default:       break;                   /* ya es una cadena */
+    }
+}
+
 /* Operación entre dos float: rax = izquierdo, rcx = derecho (bits).
  *           movq xmm0, rax
  *           movq xmm1, rcx
@@ -344,8 +386,38 @@ static void gen_binary(Node *n) {
     }
     if (n->op == OP_AND || n->op == OP_OR) { gen_logic(n); return; }
 
-    /* Si interviene un float, los dos operandos se promueven a float */
-    if (n->a->type.kind == TY_FLOAT || n->b->type.kind == TY_FLOAT) {
+    /* Concatenación: el resultado es string si alguno de los operandos
+     * lo es; el otro se convierte a cadena.
+     *           <izquierdo como cadena>
+     *           push rax
+     *           <derecho como cadena>
+     *           mov rcx, rax
+     *           pop rax
+     *           call concat */
+    if (n->type.kind == TY_STRING) {
+        gen_as_string(n->a);
+        x_push(&a, RAX);
+        gen_as_string(n->b);
+        x_mov_rr(&a, RCX, RAX);
+        x_pop(&a, RAX);
+        x_call(&a, rt.concat);
+        return;
+    }
+
+    /* Operandos: rax = izquierdo, rcx = derecho, según el tipo.
+     *   - cadenas: strcmp deja -1, 0 o 1 en rax y rcx = 0; abajo se
+     *     compara rax con 0 con el mismo operador (como strcmp(a, b) < 0);
+     *   - si interviene un float, los dos se promueven y opera gen_float_op;
+     *   - enteros y booleanos: los valores mismos. */
+    if (n->a->type.kind == TY_STRING) {
+        gen_expr(n->a);
+        x_push(&a, RAX);
+        gen_expr(n->b);
+        x_mov_rr(&a, RCX, RAX);
+        x_pop(&a, RAX);
+        x_call(&a, rt.strcmp);
+        x_mov_ri(&a, RCX, 0);
+    } else if (n->a->type.kind == TY_FLOAT || n->b->type.kind == TY_FLOAT) {
         Type f = type_of(TY_FLOAT, TY_ERROR);
         gen_conv(n->a, f);
         x_push(&a, RAX);
@@ -354,13 +426,13 @@ static void gen_binary(Node *n) {
         x_pop(&a, RAX);
         gen_float_op(n);
         return;
+    } else {
+        gen_expr(n->a);
+        x_push(&a, RAX);
+        gen_expr(n->b);
+        x_mov_rr(&a, RCX, RAX);
+        x_pop(&a, RAX);
     }
-
-    gen_expr(n->a);
-    x_push(&a, RAX);
-    gen_expr(n->b);
-    x_mov_rr(&a, RCX, RAX);
-    x_pop(&a, RAX);
 
     switch (n->op) {
         case OP_ADD: x_add_rr(&a, RAX, RCX); break;
@@ -461,6 +533,13 @@ static void gen_expr(Node *n) {
         case N_BOOL:
             x_mov_ri(&a, RAX, strcmp(n->text, "true") == 0);
             break;
+        case N_STRING: {                        /* dirección del literal en los datos */
+            char *bytes = malloc(strlen(n->text) + 1);
+            int len = unescape(n->text, bytes);
+            x_mov_ri(&a, RAX, rt_literal(&a, bytes, len));
+            free(bytes);
+            break;
+        }
         case N_FLOAT: {                         /* los bits del double, calculados por strtod */
             double v = strtod(n->text, NULL);
             uint64_t bits;
@@ -488,7 +567,16 @@ static void gen_expr(Node *n) {
             break;
         case N_CALL:   gen_call(n); break;
         case N_INDEX:  not_supported(n->line, "indexing"); break;
-        case N_REDUCE: not_supported(n->line, "a reduction"); break;
+        case N_REDUCE:
+            if (n->op == OP_LEN && n->a->type.kind == TY_STRING) {
+                gen_expr(n->a);                 /* len(cadena) = strlen */
+                x_mov_rr(&a, RSI, RAX);
+                x_call(&a, rt.strlen);
+                x_mov_rr(&a, RAX, RDX);
+            } else {
+                not_supported(n->line, "a reduction on an array");
+            }
+            break;
         default:       not_supported(n->line, "this expression"); break;
     }
 }
@@ -513,7 +601,8 @@ static void gen_print(Node *n) {
         if (k > 0) rt_print_text(&a, &rt, " ");
         x_load(&a, RAX, RSP, 8 * (count - 1 - k));
         x_call(&a, e->type.kind == TY_BOOL ? rt.print_bool
-                 : e->type.kind == TY_FLOAT ? rt.print_float : rt.print_int);
+                 : e->type.kind == TY_FLOAT ? rt.print_float
+                 : e->type.kind == TY_STRING ? rt.print_str : rt.print_int);
     }
     rt_print_text(&a, &rt, "\n");
     if (count > 0) x_add_ri(&a, RSP, 8 * count);
@@ -658,7 +747,14 @@ static void gen_switch(Node *n) {
             Type common = unify(n->a->type, c->a->type);
             gen_conv(c->a, common);
             x_load(&a, RCX, RBP, t);
-            if (common.kind == TY_FLOAT) {
+            if (common.kind == TY_STRING) {    /* strcmp(valor, case) == 0 */
+                x_mov_rr(&a, RDX, RAX);
+                x_mov_rr(&a, RAX, RCX);
+                x_mov_rr(&a, RCX, RDX);
+                x_call(&a, rt.strcmp);
+                x_test_rr(&a, RAX, RAX);
+                x_jcc(&a, CC_NE, siguiente);
+            } else if (common.kind == TY_FLOAT) {
                 if (n->a->type.kind == TY_INT) {
                     x_cvtsi2sd(&a, XMM0, RCX);
                 } else {
