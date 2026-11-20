@@ -185,6 +185,24 @@ void x_call(Asm *a, Label l) {
     rel32_to(a, l);
 }
 
+/* lea r, [rip + rel32]: REX.W 8D /r con ModR/M mod=00 rm=101
+ * Deja en r la dirección absoluta de una etiqueta. rip vale la dirección
+ * de la instrucción siguiente, que termina justo después del campo rel32,
+ * así que el desplazamiento se completa igual que el de un salto. */
+void x_lea_label(Asm *a, Reg r, Label l) {
+    buf_byte(&a->code, 0x48 | (r >= R8 ? 4 : 0));      /* REX.W [+R] */
+    buf_byte(&a->code, 0x8D);
+    buf_byte(&a->code, 0x05 | (r & 7) << 3);
+    rel32_to(a, l);
+}
+
+/* jmp r: [REX.B] FF /4  (salta a la dirección guardada en r) */
+void x_jmp_r(Asm *a, Reg r) {
+    if (r >= R8) buf_byte(&a->code, 0x41);
+    buf_byte(&a->code, 0xFF);
+    buf_byte(&a->code, 0xE0 | (r & 7));
+}
+
 /* ret: C3. Desapila la dirección de retorno y salta a ella. */
 void x_ret(Asm *a) {
     buf_byte(&a->code, 0xC3);

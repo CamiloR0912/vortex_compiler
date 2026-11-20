@@ -11,7 +11,8 @@
  *         call imprimir           ; imprimir está más abajo: salto hacia adelante
  *         dec rbx
  *         jne ciclo               ; repetir mientras rbx != 0
- *         jmp fin                 ; saltar el mensaje que no debe verse
+ *         lea r11, [rip + fin]    ; dirección absoluta de fin
+ *         jmp r11                 ; saltar el mensaje que no debe verse
  *         mov rsi, oculto
  *         mov rdx, largo_oculto
  *         call imprimir
@@ -56,7 +57,8 @@ int main(int argc, char **argv) {
     x_call(&a, imprimir);
     x_dec(&a, RBX);
     x_jcc(&a, CC_NE, ciclo);
-    x_jmp(&a, fin);
+    x_lea_label(&a, R11, fin);              /* lea r11, [rip + fin] */
+    x_jmp_r(&a, R11);                       /* jmp r11: salto indirecto a fin */
     x_mov_ri(&a, RSI, oculto_addr);
     x_mov_ri(&a, RDX, strlen(oculto));
     x_call(&a, imprimir);

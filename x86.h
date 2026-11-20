@@ -116,6 +116,8 @@ void x_jmp(Asm *a, Label l);                    /* jmp l          */
 void x_jcc(Asm *a, Cond cc, Label l);           /* j<cc> l        */
 void x_call(Asm *a, Label l);                   /* call l         */
 void x_ret(Asm *a);                             /* ret            */
+void x_lea_label(Asm *a, Reg r, Label l);       /* lea r, [rip + l]: dirección de l */
+void x_jmp_r(Asm *a, Reg r);                    /* jmp r          */
 
 void x_mov_rr(Asm *a, Reg dst, Reg src);                /* mov dst, src           */
 void x_load(Asm *a, Reg dst, Reg base, int32_t disp);   /* mov dst, [base+disp]   */
