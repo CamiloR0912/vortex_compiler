@@ -7,5 +7,5 @@ cd "$(dirname "$0")" || exit 1
 set -e
 bison -d -v parser.y
 flex lexer.l
-gcc -o vortexc main.c ast.c semantic.c lex.yy.c parser.tab.c x86gen.c runtime.c x86enc.c elf.c
+gcc -o vortexc main.c ast.c semantic.c lex.yy.c parser.tab.c x86gen.c runtime.c runtime_arrays.c x86enc.c elf.c
 echo "vortexc construido."

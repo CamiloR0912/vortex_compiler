@@ -40,6 +40,21 @@
 #define EXC_ASSERT   1              /* [Assertion error]: assert que falla               */
 #define EXC_THROW    2              /* [Uncaught exception]: throw                       */
 
+/* Vectores y matrices (runtime_arrays.c) */
+#define KIND_INT     0              /* clase de los elementos de un arreglo */
+#define KIND_FLOAT   1
+#define KIND_BOOL    2
+#define KIND_STRING  3
+#define ARR_ADD      0              /* operación elemento a elemento */
+#define ARR_SUB      1
+#define ARR_MUL      2
+#define ARR_DIV      3
+#define ARR_MOD      4
+#define RED_SUM      0              /* reducción */
+#define RED_PROD     1
+#define RED_MAX      2
+#define RED_MIN      3
+
 typedef struct {
     Label write;        /* agrega rdx bytes desde la dirección rsi a la salida */
     Label write_all;    /* write(1, rsi, rdx) repetido hasta escribir todo     */
@@ -69,6 +84,11 @@ typedef struct {
     uint64_t depth;     /* dirección del contador de llamadas en curso (bss)   */
     uint64_t try_top;   /* cantidad de bloques try activos (bss)               */
     uint64_t handlers;  /* pila de manejadores de try, 32 bytes cada uno (bss) */
+    /* Vectores y matrices: ver runtime_arrays.c */
+    Label arr_new, arr_total, arr_copy, arr_to_float, mat_from_rows;
+    Label vec_addr, vec_get, mat_row, mat_addr2, mat_set_row;
+    Label elem_apply, arr_arr, arr_scalar, arr_neg, arr_eq, reduce;
+    Label print_items, print_arr;
     uint64_t num_buf;   /* espacio temporal para escribir números (bss)        */
     uint64_t heap_ptr;  /* siguiente byte libre del bloque actual (bss)        */
     uint64_t heap_end;  /* fin del bloque actual (bss)                         */
@@ -85,6 +105,10 @@ void rt_emit(Asm *a, Runtime *rt);
 
 /* Emite el código que imprime un texto fijo (se guarda en los datos) */
 void rt_print_text(Asm *a, Runtime *rt, const char *text);
+
+/* Emite las rutinas de vectores y matrices (runtime_arrays.c); la llama
+ * rt_emit */
+void rt_emit_arrays(Asm *a, Runtime *rt);
 
 /* Guarda un texto en los datos, terminado en 0, y devuelve su dirección */
 uint64_t rt_literal(Asm *a, const char *text, int len);
