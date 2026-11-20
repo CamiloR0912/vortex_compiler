@@ -139,11 +139,15 @@ void x_rep_movsb(Asm *a);                               /* rep movsb            
 void x_and_rr(Asm *a, Reg dst, Reg src);                /* and dst, src           */
 void x_or_rr(Asm *a, Reg dst, Reg src);                 /* or dst, src            */
 void x_xor_rr(Asm *a, Reg dst, Reg src);                /* xor dst, src           */
+void x_shl_ri(Asm *a, Reg r, int n);                    /* shl r, n               */
+void x_shr_ri(Asm *a, Reg r, int n);                    /* shr r, n               */
+void x_sar_ri(Asm *a, Reg r, int n);                    /* sar r, n               */
 void x_setcc_al(Asm *a, Cond cc);                       /* set<cc> al             */
 
 /* ---- Punto flotante (SSE2, doble precisión) ---- */
 void x_movq_xr(Asm *a, Xmm dst, Reg src);               /* movq xmm, r64 (copia bits) */
 void x_movq_rx(Asm *a, Reg dst, Xmm src);               /* movq r64, xmm (copia bits) */
+void x_movsd_rr(Asm *a, Xmm dst, Xmm src);              /* movsd dst, src         */
 void x_addsd(Asm *a, Xmm dst, Xmm src);                 /* addsd dst, src         */
 void x_subsd(Asm *a, Xmm dst, Xmm src);                 /* subsd dst, src         */
 void x_mulsd(Asm *a, Xmm dst, Xmm src);                 /* mulsd dst, src         */

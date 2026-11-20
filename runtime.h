@@ -50,6 +50,10 @@ typedef struct {
     Label str_bool;     /* rax = "true" o "false" según rax                    */
     Label concat;       /* rax = nueva cadena: cadena rax seguida de cadena rcx */
     Label strcmp;       /* rax = -1, 0 o 1 al comparar las cadenas rax y rcx   */
+    Label fmt_float;    /* escribe el double con bits rax como "%.15g" (más
+                           ".0" si hace falta); rsi = dirección, rdx = largo   */
+    Label print_float;  /* imprime el double con bits rax                      */
+    Label str_float;    /* rax = cadena con el double con bits rax             */
     Label exit;         /* vacía el buffer y termina con código rdi            */
     Label error;        /* imprime "[Runtime error] line rax: " y el mensaje
                            (rsi = dirección, rdx = largo); termina con código 1 */
@@ -60,6 +64,7 @@ typedef struct {
     uint64_t heap_ptr;  /* siguiente byte libre del bloque actual (bss)        */
     uint64_t heap_end;  /* fin del bloque actual (bss)                         */
     uint64_t text_true, text_false;     /* "true" y "false", terminadas en 0  */
+    uint64_t pow10;     /* tabla de doubles 10^-324 ... 10^308 (datos)         */
 } Runtime;
 
 /* Crea las etiquetas y reserva la memoria; las rutinas pueden llamarse

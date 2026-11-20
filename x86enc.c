@@ -371,6 +371,22 @@ void x_and_rr(Asm *a, Reg dst, Reg src) { op_rr(a, 0x21, src, dst); }
 void x_or_rr(Asm *a, Reg dst, Reg src)  { op_rr(a, 0x09, src, dst); }
 void x_xor_rr(Asm *a, Reg dst, Reg src) { op_rr(a, 0x31, src, dst); }
 
+/* Desplazamientos por una cantidad fija: REX.W C1 /n ib
+ *   shl r, n   /4   desplaza a la izquierda (multiplica por 2^n)
+ *   shr r, n   /5   desplaza a la derecha rellenando con ceros
+ *   sar r, n   /7   desplaza a la derecha copiando el bit de signo:
+ *                   divide entre 2^n redondeando hacia abajo, también
+ *                   para negativos */
+static void shift_ri(Asm *a, int ext, Reg r, int n) {
+    rex(a, 1, 0, r);
+    buf_byte(&a->code, 0xC1);
+    modrm_reg(a, ext, r);
+    buf_byte(&a->code, n);
+}
+void x_shl_ri(Asm *a, Reg r, int n) { shift_ri(a, 4, r, n); }
+void x_shr_ri(Asm *a, Reg r, int n) { shift_ri(a, 5, r, n); }
+void x_sar_ri(Asm *a, Reg r, int n) { shift_ri(a, 7, r, n); }
+
 /* ==========================================================================
  * Punto flotante con SSE2
  *
@@ -393,6 +409,9 @@ static void sse(Asm *a, int prefix, int w, int opcode, int reg, int rm) {
  * que cualquier otro valor de la máquina de pila. */
 void x_movq_xr(Asm *a, Xmm dst, Reg src) { sse(a, 0x66, 1, 0x6E, dst, src); }
 void x_movq_rx(Asm *a, Reg dst, Xmm src) { sse(a, 0x66, 1, 0x7E, src, dst); }
+
+/* movsd dst, src: F2 0F 10 /r  (copia el double de un registro xmm a otro) */
+void x_movsd_rr(Asm *a, Xmm dst, Xmm src) { sse(a, 0xF2, 0, 0x10, dst, src); }
 
 /* Aritmética escalar de doble precisión: F2 0F 58/5C/59/5E /r */
 void x_addsd(Asm *a, Xmm dst, Xmm src) { sse(a, 0xF2, 0, 0x58, dst, src); }
