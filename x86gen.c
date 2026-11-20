@@ -41,8 +41,12 @@ static int unsupported = 0;     /* construcciones que la etapa aún no genera */
 
 /* Lo que el generador sabe de cada símbolo, indexado por su id */
 typedef struct {
-    int level;          /* nivel de anidamiento de la función dueña (0 = programa) */
-    int offset;         /* posición respecto al rbp de esa función */
+    int level;          /* variable: nivel de la función dueña (0 = programa)
+                           función: nivel de su cuerpo (1 si se define en el programa) */
+    int offset;         /* variable: posición respecto al rbp de esa función */
+    int frame;          /* función: bytes de variables locales de su marco */
+    int has_label;
+    Label label;        /* función: dirección de su código */
 } SymInfo;
 
 static SymInfo *info = NULL;
@@ -92,6 +96,30 @@ static void layout_var(Symbol *s, int level) {
 
 static void layout_stmts(Node *list, int level);
 
+/* Marco de una función de nivel level:
+ *   [rbp + 24 + 8*(n-1-k)]  parámetro k de n (el caller los apila en orden)
+ *   [rbp + 16]              enlace estático
+ *   [rbp + 8]               dirección de retorno (la apila call)
+ *   [rbp]                   rbp de quien llamó
+ *   [rbp - 8], [rbp - 16]...  variables locales */
+static void layout_func(Node *f, int level) {
+    SymInfo *fi = sym_info(f->sym);
+    int saved = layout_size, count = 0, k;
+    Node *p;
+
+    fi->level = level;
+    for (p = f->a; p != NULL; p = p->next) count++;
+    for (p = f->a, k = 0; p != NULL; p = p->next, k++) {
+        SymInfo *pi = sym_info(p->sym);
+        pi->level = level;
+        pi->offset = 24 + 8 * (count - 1 - k);
+    }
+    layout_size = 0;
+    layout_stmts(f->b->a, level);
+    fi->frame = layout_size;
+    layout_size = saved;
+}
+
 static void layout_stmt(Node *n, int level) {
     Node *c;
     switch (n->kind) {
@@ -109,6 +137,7 @@ static void layout_stmt(Node *n, int level) {
         case N_SWITCH:
             for (c = n->b; c != NULL; c = c->next) layout_stmt(c->b, level);
             break;
+        case N_FUNC:    layout_func(n, level + 1); break;
         default: break;
     }
 }
@@ -151,6 +180,38 @@ static void store_var(Symbol *s) {
         frame_of(RCX, si->level);
         x_store(&a, RCX, si->offset, RAX);
     }
+}
+
+/* Etiqueta del código de una función; se crea la primera vez que se pide,
+ * que puede ser una llamada anterior a la definición. */
+static Label func_label(Symbol *f) {
+    SymInfo *fi = sym_info(f);
+    if (!fi->has_label) {
+        fi->label = asm_label(&a);
+        fi->has_label = 1;
+    }
+    return fi->label;
+}
+
+/* Funciones encontradas mientras se genera; se generan después del código
+ * que las contiene, para que no queden en medio de él. */
+static Node **pending = NULL;
+static int pending_count = 0, pending_cap = 0;
+
+static void defer_func(Node *f) {
+    if (pending_count == pending_cap) {
+        pending_cap = pending_cap ? pending_cap * 2 : 16;
+        pending = realloc(pending, pending_cap * sizeof *pending);
+    }
+    pending[pending_count++] = f;
+}
+
+/* Salida de una función: deshacer el marco y volver. El valor de retorno,
+ * si lo hay, ya está en rax. */
+static void gen_epilogue(void) {
+    x_mov_rr(&a, RSP, RBP);
+    x_pop(&a, RBP);
+    x_ret(&a);
 }
 
 /* Reserva en el marco una posición que no corresponde a ninguna variable
@@ -242,8 +303,40 @@ static void gen_binary(Node *n) {
     }
 }
 
+/* Llamada a función. semantic.c ya eligió la versión (n->sym) y dejó en
+ * n->b los argumentos en el orden de los parámetros, con los valores por
+ * defecto en lugar de los que faltan.
+ *           <argumento 1>
+ *           push rax
+ *           ...
+ *           <argumento n>
+ *           push rax
+ *           <enlace estático>     ; marco de la función que contiene la definición
+ *           push rax
+ *           call f
+ *           add rsp, 8 * (n + 1)  ; quitar argumentos y enlace
+ * El resultado queda en rax. Un valor por defecto se calcula aquí, en
+ * cada llamada, como en la versión anterior. */
+static void gen_call(Node *n) {
+    SymInfo *fi = sym_info(n->sym);
+    Node *b;
+    int count = 0;
+
+    for (b = n->b; b != NULL; b = b->next) {
+        if (!is_scalar(b->type)) { not_supported(n->line, "a parameter of this type"); return; }
+        gen_expr(b->a);
+        x_push(&a, RAX);
+        count++;
+    }
+    frame_of(RAX, fi->level - 1);
+    x_push(&a, RAX);
+    x_call(&a, func_label(n->sym));
+    x_add_ri(&a, RSP, 8 * (count + 1));
+}
+
 static void gen_expr(Node *n) {
-    if (!is_scalar(n->type)) {
+    int void_call = n->kind == N_CALL && n->type.kind == TY_VOID;
+    if (!is_scalar(n->type) && !void_call) {
         not_supported(n->line, type_name(n->type));
         return;
     }
@@ -269,7 +362,7 @@ static void gen_expr(Node *n) {
         case N_BINARY:
             gen_binary(n);
             break;
-        case N_CALL:   not_supported(n->line, "a function call"); break;
+        case N_CALL:   gen_call(n); break;
         case N_INDEX:  not_supported(n->line, "indexing"); break;
         case N_REDUCE: not_supported(n->line, "a reduction"); break;
         default:       not_supported(n->line, "this expression"); break;
@@ -486,7 +579,13 @@ static void gen_stmt(Node *n) {
         case N_SWITCH:
             gen_switch(n);
             break;
-        case N_FUNC:     not_supported(n->line, "a function definition"); break;
+        case N_FUNC:                    /* su código se genera después */
+            defer_func(n);
+            break;
+        case N_RETURN:
+            if (n->a != NULL) gen_expr(n->a);
+            gen_epilogue();
+            break;
         case N_TRY:      not_supported(n->line, "'try'"); break;
         case N_ASSERT:   not_supported(n->line, "'assert'"); break;
         case N_THROW:    not_supported(n->line, "'throw'"); break;
@@ -496,6 +595,43 @@ static void gen_stmt(Node *n) {
 
 static void gen_stmts(Node *list) {
     for (; list != NULL; list = list->next) gen_stmt(list);
+}
+
+/* Código de una función:
+ *   f:      push rbp
+ *           mov rbp, rsp
+ *           sub rsp, N            ; N se completa al terminar la función
+ *           <cuerpo>
+ *           mov rsp, rbp          ; fin sin return (función void)
+ *           pop rbp
+ *           ret
+ * Cada return deja su valor en rax y hace la misma salida. */
+static void gen_function(Node *f) {
+    SymInfo *fi = sym_info(f->sym);
+    Node *p;
+    int frame_at;
+
+    if (!is_scalar(f->type) && f->type.kind != TY_VOID) {
+        not_supported(f->line, "a function returning this type");
+        return;
+    }
+    for (p = f->a; p != NULL; p = p->next)
+        if (!is_scalar(p->type)) { not_supported(p->line, "a parameter of this type"); return; }
+
+    cur_level = fi->level;
+    frame_size = fi->frame;
+    loop_count = 0;
+
+    asm_bind(&a, func_label(f->sym));
+    x_push(&a, RBP);
+    x_mov_rr(&a, RBP, RSP);
+    x_sub_ri(&a, RSP, 0);
+    frame_at = a.code.len - 4;
+
+    gen_stmts(f->b->a);
+    gen_epilogue();
+
+    asm_patch_u32(&a, frame_at, (uint32_t)frame_size);
 }
 
 /* Genera el programa completo y escribe el ejecutable en path.
@@ -523,10 +659,16 @@ int generate_native(Node *program, const char *path) {
     /* Fin del programa: exit(0) */
     x_mov_ri(&a, RDI, 0);
     x_call(&a, rt.exit);
+    asm_patch_u32(&a, frame_at, (uint32_t)frame_size);
+
+    /* Funciones: cada una puede agregar a la cola las que define dentro */
+    {
+        int k;
+        for (k = 0; k < pending_count; k++) gen_function(pending[k]);
+    }
 
     if (unsupported > 0) return unsupported;
 
-    asm_patch_u32(&a, frame_at, (uint32_t)frame_size);
     rt_emit(&a, &rt);
     asm_finish(&a);
     if (elf_write(path, &a, 0) != 0) {
