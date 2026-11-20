@@ -14,7 +14,7 @@ El compilador se reconstruye por etapas: cada rama contiene solo lo que existe h
 | 4 | `etapa-4/funciones` | Funciones, recursión, sobrecarga y funciones anidadas | Terminada |
 | 5 | `etapa-5/cadenas-y-reales` | `string` y `float` | Terminada |
 | 6 | `etapa-6/excepciones` | `try`-`catch`, `throw`, `assert` y errores de ejecución | Terminada |
-| 7 | `etapa-7/vectores-y-matrices` | Arreglos, operaciones elemento a elemento y reducciones | Pendiente |
+| 7 | `etapa-7/vectores-y-matrices` | Arreglos, operaciones elemento a elemento y reducciones | Terminada |
 
 ## Etapa 1: ejecutable mínimo
 
@@ -410,3 +410,85 @@ Al restaurar `rsp` y `rbp`, el `catch` se ejecuta en el marco de la función que
 | `tests/22_uncaught_assert`, `23_uncaught_throw` | Recuperadas de `main` |
 
 `tests/21_exceptions.vx` de `main` también usa vectores; se recupera en la etapa 7.
+
+## Etapa 7: vectores y matrices
+
+### Representación
+
+Un arreglo es la dirección de un bloque en el heap, con la misma estructura que `VxArr` en la versión anterior:
+
+```
+[+0]   n      cantidad de elementos (vector) o de filas (matriz)
+[+8]   cols   -1 en un vector; cantidad de columnas en una matriz
+[+16]  elementos de 8 bytes; una matriz guarda sus filas una tras otra
+```
+
+Cada elemento ocupa 8 bytes igual que cualquier valor de la máquina de pila: un entero, los bits de un double, 0/1 o la dirección de una cadena.
+
+### Rutinas (`runtime_arrays.c`)
+
+| Rutina | Hace lo que antes hacía |
+|---|---|
+| `arr_new`, `arr_copy`, `arr_to_float` | `vx_new`, `vx_copy`, `vx_to_float` |
+| `mat_from_rows` | `vx_mat`: revisa que las filas midan lo mismo y las copia |
+| `vec_get`, `vec_addr`, `mat_row`, `mat_addr2`, `mat_set_row` | `vx_get`, `vx_at`, `vx_row`, `vx_at2`, `vx_set_row`: índices verificados |
+| `elem_apply`, `arr_arr`, `arr_scalar`, `arr_neg` | `vx_apply`, `vx_arr_arr`, `vx_arr_scalar`, `vx_arr_neg` |
+| `arr_eq`, `reduce`, `print_items`, `print_arr` | `vx_arr_eq`, `vx_reduce`, `vx_print_items`, `vx_print_arr` |
+
+Los mensajes de error llevan números y nombres de tipo (`index 3 out of range for vector<int> of length 3`). Se arman al ejecutar con `emit_fail_fmt`, que recibe un formato al estilo de `printf` (`%d`, `%s`) y produce la cadena de llamadas a `str_int` y `concat`. El texto es idéntico al de la versión anterior.
+
+### Generación
+
+| Construcción | Código generado |
+|---|---|
+| `[a, b, c]` | Calcular y apilar los elementos (convertidos al tipo de los elementos), `arr_new` y copiar los valores desde la pila |
+| `[[...], [...]]` | Apilar las filas y llamar a `mat_from_rows` |
+| `v[i]`, `m[i]` | `vec_get`, `mat_row` (una fila se lee como copia). `m[i][j]` es `(m[i])[j]` |
+| `v[i] = x`, `m[i] = fila`, `m[i][j] = x` | `vec_addr`, `mat_set_row`, `mat_addr2` |
+| `a op b` con arreglos | `arr_arr` o `arr_scalar`; `-a` con `arr_neg`; `==` y `!=` con `arr_eq` en el tipo común |
+| `sum`, `prod`, `max`, `min` | `reduce`; `len` lee el campo `n` |
+| `print` | `print_arr` |
+| Valores por copia | Si el origen de una declaración, asignación, argumento o `return` es una variable, `arr_copy` |
+
+### Pruebas
+
+| Prueba | Qué demuestra |
+|---|---|
+| `tests/nativo/arreglos.c` | Cada rutina llamada directamente |
+| `tests/35_native_arrays.vx` | Cada mensaje de error de arreglos (capturado), matrices de reales y promoción, vectores de cadenas y booleanos, funciones anidadas que modifican un arreglo externo, recursión y producto de matrices |
+| `tests/16`, `17`, `19`, `21`, `26`, `28` | Recuperadas de `main`, incluido el programa científico completo |
+
+## Resultado final
+
+`vortexc` compila todo el lenguaje Vortex a un ejecutable ELF x86-64 sin ningún programa externo. El ejecutable tampoco usa la biblioteca de C: se comunica con el núcleo de Linux por medio de tres llamadas al sistema: `write` (salida), `mmap` (memoria del heap) y `exit`.
+
+### Pruebas
+
+```
+bash run                      # construye vortexc
+bash tests/nativo/run.sh      # 9 pruebas del backend (codificador, ELF, runtime)
+bash tests/run_tests.sh       # 40 programas Vortex
+```
+
+Las 33 pruebas de `main` pasan con su salida esperada **sin cambios**: la salida de cada programa compilado por el backend nativo es idéntica byte por byte a la de la versión que usaba GCC. Las 7 pruebas nuevas (`29` a `35`) también tienen como salida esperada la de la versión anterior.
+
+### Archivos
+
+| Archivo | Líneas | Hace el trabajo de |
+|---|---|---|
+| `lexer.l`, `parser.y`, `ast.c`, `semantic.c`, `vortex.h` | 1554 | Análisis léxico, sintáctico y semántico (sin cambios respecto a `main`) |
+| `x86gen.c` | 1313 | Generador de código (reemplaza a `codegen.c`) |
+| `runtime.c`, `runtime_arrays.c`, `runtime.h` | 2593 | Rutinas de ejecución en código máquina (reemplazan a `vx_runtime.h` y a la biblioteca de C) |
+| `x86enc.c`, `x86.h` | 639 | Ensamblador |
+| `elf.c` | 116 | Enlazador |
+| `main.c` | 112 | Coordina las etapas |
+
+### Diferencias deliberadas con la versión anterior
+
+**Orden de evaluación.** En la versión anterior el orden en que se calculaban los operandos lo decidía GCC al compilar el código C generado, y no era uniforme: `a + b` calculaba primero `a`, pero `a / b`, la concatenación, la comparación de cadenas, las operaciones entre arreglos y los argumentos de una llamada calculaban primero el operando de la derecha, porque se traducían a llamadas a funciones de C y GCC evalúa sus argumentos de derecha a izquierda. El backend nativo define una sola regla: **siempre de izquierda a derecha**. Solo se nota cuando dos operandos tienen efectos visibles (imprimen, modifican una variable o fallan); ninguna de las pruebas de `main` depende de eso.
+
+### Limitaciones conocidas
+
+- **Reales subnormales.** La conversión a texto se validó contra `printf` de glibc con 219 870 valores; la única diferencia fue un número subnormal (menor que 2.2 · 10^-308).
+- **Memoria.** Las cadenas y los arreglos no se liberan, igual que en la versión anterior: el sistema la recupera al terminar el programa.
+- **Plataforma.** El ejecutable es para Linux x86-64 (en este proyecto, Ubuntu sobre WSL).

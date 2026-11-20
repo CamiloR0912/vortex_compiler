@@ -28,13 +28,14 @@
  *   anidada llega a las variables de las funciones que la contienen
  *   siguiendo la cadena de enlaces estáticos.
  *
- * Alcance hasta la etapa 6: int, bool, float, string, variables,
- * asignación, bloques, aritmética, comparaciones, operadores lógicos,
- * concatenación, len de cadenas, print, if/else, while, for, break,
- * continue, switch y funciones (recursión, sobrecarga, parámetros
- * nombrados y por defecto, funciones anidadas), try-catch, throw y
- * assert. Si el programa usa algo
- * más, se reporta como no soportado y no se genera el ejecutable.
+ * Alcance: todo el lenguaje (int, bool, float, string, vector, matrix,
+ * control de flujo, funciones anidadas y sobrecargadas, try-catch, throw y
+ * assert). not_supported queda como resguardo: si una construcción nueva
+ * del lenguaje no tuviera generación, se reporta en lugar de producir un
+ * ejecutable incorrecto.
+ *
+ * Orden de evaluación: siempre de izquierda a derecha (operandos,
+ * argumentos, índices y valores de una asignación). Ver NATIVO.md.
  * ========================================================================== */
 #include <stdlib.h>
 #include <string.h>
