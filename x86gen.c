@@ -174,6 +174,11 @@ static void layout_stmt(Node *n, int level) {
             for (c = n->b; c != NULL; c = c->next) layout_stmt(c->b, level);
             break;
         case N_FUNC:    layout_func(n, level + 1); break;
+        case N_TRY:
+            layout_stmt(n->a, level);
+            layout_var(n->sym, level);                   /* variable del catch */
+            layout_stmt(n->b, level);
+            break;
         default: break;
     }
 }
@@ -643,11 +648,27 @@ static void gen_if(Node *n) {
     asm_bind(&a, fin);
 }
 
+/* Bloques try abiertos en la función que se está generando. Salir de un
+ * try con break, continue o return deja su manejador registrado; antes del
+ * salto hay que retirar los que quedan atrás, como en la versión anterior. */
+static int try_depth = 0;
+
+/* try_top -= k (usa r8 y rdx; no toca rax, que puede tener el valor de
+ * un return) */
+static void leave_tries(int k) {
+    if (k <= 0) return;
+    x_mov_ri(&a, R8, rt.try_top);
+    x_load(&a, RDX, R8, 0);
+    x_sub_ri(&a, RDX, k);
+    x_store(&a, R8, 0, RDX);
+}
+
 /* Ciclos abiertos, del más externo al más interno. break salta al final
  * del ciclo más interno y continue a su punto de continuación. */
 typedef struct {
     Label brk;          /* destino de break: después del ciclo          */
     Label cont;         /* destino de continue: la condición o el paso  */
+    int tries;          /* try_depth al abrir el ciclo                  */
 } Loop;
 
 static Loop loops[256];
@@ -656,6 +677,7 @@ static int loop_count = 0;
 static void loop_open(Label brk, Label cont) {
     loops[loop_count].brk = brk;
     loops[loop_count].cont = cont;
+    loops[loop_count].tries = try_depth;
     loop_count++;
 }
 
@@ -777,6 +799,96 @@ static void gen_switch(Node *n) {
     asm_bind(&a, fin);
 }
 
+/* try { bloque } catch (e) { bloque }
+ *           (si try_top == MAX_TRY: error "too many nested try blocks")
+ *           h = handlers + 32 * try_top
+ *           mov [h], rsp
+ *           mov [h+8], rbp
+ *           lea rdx, [rip + catch]
+ *           mov [h+16], rdx
+ *           mov [h+24], depth
+ *           try_top += 1
+ *           <bloque del try>
+ *           try_top -= 1          ; terminó sin errores
+ *           jmp fin
+ * catch:    mov e, rax            ; raise llega aquí con el texto en rax
+ *           <bloque del catch>
+ * fin:
+ * raise restaura rsp y rbp a los valores guardados, así que el catch se
+ * ejecuta en el marco de la función que contiene el try, aunque el error
+ * haya ocurrido varias llamadas más adentro. */
+static void gen_try(Node *n) {
+    Label hay_lugar = asm_label(&a), catch_label = asm_label(&a), fin = asm_label(&a);
+
+    x_mov_ri(&a, R8, rt.try_top);
+    x_load(&a, RAX, R8, 0);
+    x_mov_ri(&a, RCX, MAX_TRY);
+    x_cmp_rr(&a, RAX, RCX);
+    x_jcc(&a, CC_L, hay_lugar);
+    x_mov_ri(&a, RAX, 0);                   /* como antes: el error no se captura */
+    x_store(&a, R8, 0, RAX);
+    rt_fail(&a, &rt, n->line, "too many nested try blocks");
+    asm_bind(&a, hay_lugar);
+    x_mov_rr(&a, RCX, RAX);
+    x_shl_ri(&a, RCX, 5);
+    x_mov_ri(&a, RDX, rt.handlers);
+    x_add_rr(&a, RCX, RDX);                 /* rcx = manejador */
+    x_store(&a, RCX, 0, RSP);
+    x_store(&a, RCX, 8, RBP);
+    x_lea_label(&a, RDX, catch_label);
+    x_store(&a, RCX, 16, RDX);
+    x_mov_ri(&a, R9, rt.depth);
+    x_load(&a, RDX, R9, 0);
+    x_store(&a, RCX, 24, RDX);
+    x_add_ri(&a, RAX, 1);
+    x_store(&a, R8, 0, RAX);
+
+    try_depth++;
+    gen_stmt(n->a);
+    try_depth--;
+    leave_tries(1);
+    x_jmp(&a, fin);
+
+    asm_bind(&a, catch_label);
+    store_var(n->sym);
+    gen_stmt(n->b);
+    asm_bind(&a, fin);
+}
+
+/* assert(condición) o assert(condición, mensaje). El mensaje solo se
+ * calcula si la condición es falsa, como en la versión anterior.
+ *           <condición>
+ *           test rax, rax
+ *           jne ok
+ *           <mensaje>                 ; si lo hay
+ *           mov rcx, rax
+ *           mov rax, "assertion failed: "
+ *           call concat
+ *           mov rsi, rax              ; (sin mensaje: "assertion failed")
+ *           mov rax, línea
+ *           mov rdi, EXC_ASSERT
+ *           call raise
+ * ok: */
+static void gen_assert(Node *n) {
+    Label ok = asm_label(&a);
+    gen_expr(n->a);
+    x_test_rr(&a, RAX, RAX);
+    x_jcc(&a, CC_NE, ok);
+    if (n->b != NULL) {
+        gen_expr(n->b);
+        x_mov_rr(&a, RCX, RAX);
+        x_mov_ri(&a, RAX, rt_literal(&a, "assertion failed: ", 18));
+        x_call(&a, rt.concat);
+        x_mov_rr(&a, RSI, RAX);
+    } else {
+        x_mov_ri(&a, RSI, rt_literal(&a, "assertion failed", 16));
+    }
+    x_mov_ri(&a, RAX, n->line);
+    x_mov_ri(&a, RDI, EXC_ASSERT);
+    x_call(&a, rt.raise);
+    asm_bind(&a, ok);
+}
+
 static void gen_stmt(Node *n) {
     switch (n->kind) {
         case N_VARDECL:
@@ -808,9 +920,11 @@ static void gen_stmt(Node *n) {
             gen_for(n);
             break;
         case N_BREAK:                   /* semantic.c ya verificó que hay un ciclo */
+            leave_tries(try_depth - loops[loop_count - 1].tries);
             x_jmp(&a, loops[loop_count - 1].brk);
             break;
         case N_CONTINUE:
+            leave_tries(try_depth - loops[loop_count - 1].tries);
             x_jmp(&a, loops[loop_count - 1].cont);
             break;
         case N_SWITCH:
@@ -820,12 +934,29 @@ static void gen_stmt(Node *n) {
             defer_func(n);
             break;
         case N_RETURN:
+            /* el valor se calcula todavía dentro de los try abiertos */
             if (n->a != NULL) gen_conv(n->a, n->type);  /* n->type: tipo de retorno */
+            leave_tries(try_depth);
             gen_epilogue();
             break;
-        case N_TRY:      not_supported(n->line, "'try'"); break;
-        case N_ASSERT:   not_supported(n->line, "'assert'"); break;
-        case N_THROW:    not_supported(n->line, "'throw'"); break;
+        case N_TRY:
+            gen_try(n);
+            break;
+        case N_THROW:
+            /*       <valor como cadena>
+             *       mov rsi, rax
+             *       mov rax, línea
+             *       mov rdi, EXC_THROW
+             *       call raise */
+            gen_as_string(n->a);
+            x_mov_rr(&a, RSI, RAX);
+            x_mov_ri(&a, RAX, n->line);
+            x_mov_ri(&a, RDI, EXC_THROW);
+            x_call(&a, rt.raise);
+            break;
+        case N_ASSERT:
+            gen_assert(n);
+            break;
         default:         not_supported(n->line, "this statement"); break;
     }
 }
@@ -860,6 +991,7 @@ static void gen_function(Node *f) {
     cur_level = fi->level;
     frame_size = fi->frame;
     loop_count = 0;
+    try_depth = 0;
 
     asm_bind(&a, func_label(f->sym));
     x_push(&a, RBP);
