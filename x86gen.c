@@ -39,10 +39,17 @@ static Asm a;
 static Runtime rt;
 static int unsupported = 0;     /* construcciones que la etapa aún no genera */
 
-/* Posición de cada variable en el marco, indexada por el id del símbolo */
-static int *slot_of = NULL;
-static int slot_cap = 0;
-static int frame_size = 0;
+/* Lo que el generador sabe de cada símbolo, indexado por su id */
+typedef struct {
+    int level;          /* nivel de anidamiento de la función dueña (0 = programa) */
+    int offset;         /* posición respecto al rbp de esa función */
+} SymInfo;
+
+static SymInfo *info = NULL;
+static int info_cap = 0;
+
+static int cur_level = 0;       /* nivel de la función que se está generando */
+static int frame_size = 0;      /* bytes de variables y temporales de su marco */
 
 static void gen_expr(Node *n);
 static void gen_stmt(Node *n);
@@ -58,20 +65,92 @@ static int is_scalar(Type t) {
     return t.kind == TY_INT || t.kind == TY_BOOL;
 }
 
-/* Desplazamiento respecto a rbp de la variable s; la primera vez que
- * aparece se le asigna la siguiente posición libre del marco. */
-static int var_offset(Symbol *s) {
-    if (s->id >= slot_cap) {
-        int old = slot_cap;
-        slot_cap = s->id * 2 + 16;
-        slot_of = realloc(slot_of, slot_cap * sizeof *slot_of);
-        memset(slot_of + old, 0, (slot_cap - old) * sizeof *slot_of);
+static SymInfo *sym_info(Symbol *s) {
+    if (s->id >= info_cap) {
+        int old = info_cap;
+        info_cap = s->id * 2 + 16;
+        info = realloc(info, info_cap * sizeof *info);
+        memset(info + old, 0, (info_cap - old) * sizeof *info);
     }
-    if (slot_of[s->id] == 0) {
-        frame_size += 8;
-        slot_of[s->id] = -frame_size;
+    return &info[s->id];
+}
+
+/* ===================== Posiciones de las variables =====================
+ * Antes de generar código se recorre el árbol y se asigna a cada variable
+ * su nivel y su posición en el marco de la función que la declara. Así,
+ * cuando el código de cualquier parte del programa menciona una variable,
+ * su posición ya se conoce aunque su declaración se genere después. */
+
+static int layout_size;         /* bytes asignados en el marco que se recorre */
+
+static void layout_var(Symbol *s, int level) {
+    SymInfo *si = sym_info(s);
+    layout_size += 8;
+    si->level = level;
+    si->offset = -layout_size;
+}
+
+static void layout_stmts(Node *list, int level);
+
+static void layout_stmt(Node *n, int level) {
+    Node *c;
+    switch (n->kind) {
+        case N_VARDECL: layout_var(n->sym, level); break;
+        case N_BLOCK:   layout_stmts(n->a, level); break;
+        case N_IF:
+            layout_stmt(n->b, level);
+            if (n->c != NULL) layout_stmt(n->c, level);    /* else o else if */
+            break;
+        case N_WHILE:   layout_stmt(n->b, level); break;
+        case N_FOR:
+            if (n->a != NULL) layout_stmt(n->a, level);    /* variable del for */
+            layout_stmt(n->d, level);
+            break;
+        case N_SWITCH:
+            for (c = n->b; c != NULL; c = c->next) layout_stmt(c->b, level);
+            break;
+        default: break;
     }
-    return slot_of[s->id];
+}
+
+static void layout_stmts(Node *list, int level) {
+    for (; list != NULL; list = list->next) layout_stmt(list, level);
+}
+
+/* ===================== Acceso a variables =====================
+ * Cada marco de función guarda en [rbp+16] su enlace estático: la dirección
+ * del marco de la función que contiene su definición. Para llegar a una
+ * variable de una función externa se sigue esa cadena tantos pasos como
+ * niveles las separen. */
+
+/* Deja en r la dirección del marco del nivel indicado (<= cur_level) */
+static void frame_of(Reg r, int level) {
+    int k;
+    if (level == cur_level) { x_mov_rr(&a, r, RBP); return; }
+    x_load(&a, r, RBP, 16);
+    for (k = cur_level - 1; k > level; k--) x_load(&a, r, r, 16);
+}
+
+/* rax = valor de la variable */
+static void load_var(Symbol *s) {
+    SymInfo *si = sym_info(s);
+    if (si->level == cur_level) {
+        x_load(&a, RAX, RBP, si->offset);
+    } else {
+        frame_of(RAX, si->level);
+        x_load(&a, RAX, RAX, si->offset);
+    }
+}
+
+/* variable = rax (usa rcx para recorrer los enlaces) */
+static void store_var(Symbol *s) {
+    SymInfo *si = sym_info(s);
+    if (si->level == cur_level) {
+        x_store(&a, RBP, si->offset, RAX);
+    } else {
+        frame_of(RCX, si->level);
+        x_store(&a, RCX, si->offset, RAX);
+    }
 }
 
 /* Reserva en el marco una posición que no corresponde a ninguna variable
@@ -176,7 +255,7 @@ static void gen_expr(Node *n) {
             x_mov_ri(&a, RAX, strcmp(n->text, "true") == 0);
             break;
         case N_VAR:
-            x_load(&a, RAX, RBP, var_offset(n->sym));
+            load_var(n->sym);
             break;
         case N_UNARY:
             gen_expr(n->a);
@@ -373,12 +452,12 @@ static void gen_stmt(Node *n) {
         case N_VARDECL:
             if (!is_scalar(n->type)) { not_supported(n->line, type_name(n->type)); break; }
             gen_expr(n->a);
-            x_store(&a, RBP, var_offset(n->sym), RAX);
+            store_var(n->sym);
             break;
         case N_ASSIGN:
             if (n->a->kind != N_VAR) { not_supported(n->line, "assignment to an element"); break; }
             gen_expr(n->b);
-            x_store(&a, RBP, var_offset(n->a->sym), RAX);
+            store_var(n->a->sym);
             break;
         case N_EXPRSTMT:
             gen_expr(n->a);             /* el valor se descarta */
@@ -426,6 +505,12 @@ int generate_native(Node *program, const char *path) {
 
     asm_init(&a);
     rt_init(&a, &rt);
+
+    /* Posiciones de las variables del programa principal (nivel 0) */
+    layout_size = 0;
+    layout_stmts(program, 0);
+    cur_level = 0;
+    frame_size = layout_size;
 
     /* Prólogo. El tamaño del marco se completa al final. */
     x_push(&a, RBP);
