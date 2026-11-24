@@ -1,0 +1,59 @@
+// Fibonacci en Vortex: tres formas de calcularlo y algunas curiosidades.
+//   ./vortexc fibonacci.vx --run
+
+// ---- 1. Recursiva: directa, pero repite muchísimas cuentas ----
+func int fib_rec(int n) {
+    if (n < 0) { throw "fibonacci is not defined for negative numbers"; }
+    if (n < 2) { return n; }
+    return fib_rec(n - 1) + fib_rec(n - 2);
+}
+
+// ---- 2. Iterativa: solo guarda los dos últimos valores ----
+func int fib_iter(int n) {
+    int a = 0;
+    int b = 1;
+    for (int i = 0; i < n; i = i + 1) {
+        int next = a + b;
+        a = b;
+        b = next;
+    }
+    return a;
+}
+
+// ---- 3. Con un vector: guarda toda la serie ----
+func vector<int> fib_series() {
+    vector<int> f = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (int i = 2; i < len(f); i = i + 1) {
+        f[i] = f[i - 1] + f[i - 2];
+    }
+    return f;
+}
+
+print("Recursive:");
+string line = "";
+for (int i = 0; i <= 10; i = i + 1) {
+    line = line + fib_rec(i) + " ";
+}
+print("  ", line);
+
+print("Iterative:");
+print("   fib(30) =", fib_iter(30));
+print("   fib(50) =", fib_iter(50));
+
+vector<int> series = fib_series();
+print("Series:", series);
+print("   sum of the first 15 =", sum(series));
+
+// La razón entre dos términos seguidos se acerca al número áureo (1.618...)
+print("Golden ratio:");
+for (int n = 5; n <= 25; n = n + 5) {
+    float ratio = fib_iter(n + 1) * 1.0 / fib_iter(n);
+    print("   fib(" + (n + 1) + ") / fib(" + n + ") =", ratio);
+}
+
+// Con un número negativo, la función lanza una excepción
+try {
+    print(fib_rec(-3));
+} catch (e) {
+    print("Error caught:", e);
+}

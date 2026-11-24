@@ -4,6 +4,7 @@
 #   bash tests/run_tests.sh --update   regenera los .out con la salida actual
 cd "$(dirname "$0")/.." || exit 1
 pass=0; fail=0
+shopt -s nullglob       # si no hay subcarpetas con .vx, el patrón no cuenta como archivo
 for vx in tests/*.vx tests/*/*.vx; do
     out="${vx%.vx}.out"
     if [ "$1" = "--update" ]; then
